@@ -41,6 +41,8 @@ echo "  Models: $MODELS (USB storage)"
 echo ""
 echo "NOTE: Full system emulation is SLOW. Boot may take 5-15 minutes."
 echo "      Each inference run may take several minutes."
+echo "      The raspi3b machine emulates Cortex-A53; compiled models target"
+echo "      Cortex-A72 but execute correctly (same ARMv8-A NEON ISA)."
 echo "Press Ctrl+A then X to force-quit QEMU."
 echo ""
 

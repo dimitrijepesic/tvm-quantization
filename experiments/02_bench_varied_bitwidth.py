@@ -272,12 +272,20 @@ print(json.dumps(result))
             result["error_msg"] = f"child killed by signal {sig_name} (exit code {proc.returncode})"
             return result
         # try to parse the json result from stdout
+        # the child prints JSON as its last line; earlier lines may contain
+        # TVM warnings (e.g. "operators have not been tuned")
         stdout = proc.stdout.strip()
         if stdout:
-            last_line = stdout.split("\n")[-1]
-            child_result = json.loads(last_line)
-            result.update(child_result)
-            result["label"] = label
+            for line in reversed(stdout.split("\n")):
+                line = line.strip()
+                if line.startswith("{"):
+                    try:
+                        child_result = json.loads(line)
+                        result.update(child_result)
+                        result["label"] = label
+                        break
+                    except json.JSONDecodeError:
+                        continue
     except subprocess.TimeoutExpired:
         result["error_stage"] = "quantize"
         result["error_msg"] = f"subprocess timed out after {timeout}s (likely infinite loop)"

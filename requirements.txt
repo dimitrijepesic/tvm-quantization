@@ -1,0 +1,19 @@
+# Python dependencies for TVM quantization experiments
+# Tested with Python 3.10, TVM v0.15.0 (built from source)
+
+torch>=2.0
+torchvision>=0.15
+numpy>=1.24
+
+# TVM must be built from source (v0.15.0):
+#   git clone --branch v0.15.0 https://github.com/apache/tvm.git
+#   cd tvm && mkdir build && cp cmake/config.cmake build/
+#   # Edit build/config.cmake: set USE_LLVM to ON
+#   cd build && cmake .. && make -j$(nproc)
+#   cd ../python && pip install -e .
+
+# For cross-compilation (03_cross_compile_arm.py):
+#   apt install gcc-aarch64-linux-gnu
+
+# For QEMU emulation (qemu/):
+#   apt install qemu-system-aarch64

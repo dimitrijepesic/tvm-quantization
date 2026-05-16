@@ -16,8 +16,9 @@ from tvm.contrib import graph_executor
 
 MODEL_DIR = "/home/pi/models"
 INPUT_SHAPE = (1, 3, 224, 224)
-NUM_WARMUP = 2
-NUM_RUNS = 10
+NUM_WARMUP = 1
+BENCH_NUMBER = 2
+BENCH_REPEAT = 3
 
 
 def load_and_benchmark(model_prefix, label):
@@ -55,40 +56,34 @@ def load_and_benchmark(model_prefix, label):
     module.set_input("input0", tvm.nd.array(input_data))
 
     # warmup
-    print(f"Warming up ({NUM_WARMUP} runs)...", flush=True)
+    print(f"Warming up ({NUM_WARMUP} run)...", flush=True)
     for i in range(NUM_WARMUP):
         t0 = time.time()
         module.run()
-        print(f"  Warmup {i+1}: {time.time()-t0:.3f}s", flush=True)
-
-    # benchmark
-    print(f"Benchmarking ({NUM_RUNS} runs)...", flush=True)
-    times = []
-    for i in range(NUM_RUNS):
-        t0 = time.time()
-        module.run()
-        elapsed = time.time() - t0
-        times.append(elapsed)
-        print(f"  Run {i+1}: {elapsed:.3f}s", flush=True)
+        print(f"  Warmup {i+1}: {time.time()-t0:.1f}s", flush=True)
 
     # get output for sanity check
     output = module.get_output(0).numpy()
     top5 = np.argsort(output[0])[-5:][::-1]
+    print(f"  output shape={output.shape}, argmax={output[0].argmax()}, "
+          f"range=[{output.min():.3f}, {output.max():.3f}]", flush=True)
 
-    # report
-    mean_ms = np.mean(times) * 1000
-    std_ms = np.std(times) * 1000
-    min_ms = np.min(times) * 1000
-    max_ms = np.max(times) * 1000
+    # benchmark using TVM's benchmark API
+    print(f"Benchmarking (number={BENCH_NUMBER}, repeat={BENCH_REPEAT})...", flush=True)
+    timing = module.benchmark(dev, number=BENCH_NUMBER, repeat=BENCH_REPEAT)
+    print(f"  {timing}", flush=True)
+
+    mean_ms = float(timing.mean) * 1000
+    std_ms = float(timing.std) * 1000
+    median_ms = float(timing.median) * 1000
     print(f"\n  Results for {label}:")
     print(f"    Mean:   {mean_ms:.1f} ms")
+    print(f"    Median: {median_ms:.1f} ms")
     print(f"    Std:    {std_ms:.1f} ms")
-    print(f"    Min:    {min_ms:.1f} ms")
-    print(f"    Max:    {max_ms:.1f} ms")
     print(f"    Top-5 class indices: {top5}")
 
     return {"label": label, "mean_ms": mean_ms, "std_ms": std_ms,
-            "min_ms": min_ms, "max_ms": max_ms}
+            "median_ms": median_ms}
 
 
 def main():
@@ -97,7 +92,7 @@ def main():
     print("=" * 60)
     print(f"Platform: {os.uname()}")
     print(f"Input shape: {INPUT_SHAPE}")
-    print(f"Warmup runs: {NUM_WARMUP}, Benchmark runs: {NUM_RUNS}")
+    print(f"Warmup runs: {NUM_WARMUP}, Benchmark: number={BENCH_NUMBER}, repeat={BENCH_REPEAT}")
 
     results = []
 
@@ -120,11 +115,12 @@ def main():
     print("SUMMARY")
     print("=" * 60)
     for r in results:
-        print(f"  {r['label']:20s}  mean={r['mean_ms']:.1f}ms  std={r['std_ms']:.1f}ms  "
-              f"min={r['min_ms']:.1f}ms  max={r['max_ms']:.1f}ms")
+        print(f"  {r['label']:20s}  mean={r['mean_ms']:.1f}ms  "
+              f"median={r['median_ms']:.1f}ms  std={r['std_ms']:.1f}ms")
     if len(results) == 2:
         speedup = results[0]["mean_ms"] / results[1]["mean_ms"]
         print(f"\n  INT8 vs FP32 speedup: {speedup:.2f}x")
+        print(f"  ratio (int8/fp32): {1/speedup:.2f}x")
 
 
 if __name__ == "__main__":
