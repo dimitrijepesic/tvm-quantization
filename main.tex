@@ -1,0 +1,357 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[htt]{hyphenat}
+\usepackage{microtype}
+\emergencystretch=1em
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{gray!10},
+  frame=single,
+  framerule=0pt,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  aboveskip=0.8em,
+  belowskip=0.8em,
+  postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
+}
+
+\title{Auto-generating Quantized DNN Kernels using TVM}
+\author{Dimitrije Pe\v{s}i\'c}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Why Quantization Matters}
+
+ResNet50 has approximately 25 million parameters, occupying $\sim$100\,MB stored as float32. Per inference, it executes roughly 4 billion multiply-accumulate (MAC) operations. On edge hardware like Raspberry Pi 4, even a single inference can carry significant latency. Quantization addresses this by representing weights and activations as lower-precision numbers, trading numerical precision for reductions in memory, bandwidth, energy, and compute. It bridges the gap between models we can train and models we can deploy at scale.
+
+Wu et al.\ (2020) frame int8 as a sweet spot for DNN quantization. We get ${\sim}4\times$ weight compression (verified empirically in this work: the int8 ResNet50 \texttt{.params} file is 30\,MB versus 191\,MB for fp32, including TVM's serialization metadata), proportional activation memory bandwidth reduction, and on hardware with int8 acceleration like Intel VNNI or ARM DOT, up to several-fold compute throughput improvements over fp32. Crucially, ResNet50 at int8 retains accuracy to within $\sim$0.1\% top-1 of the fp32 baseline (Wu et al.\ 2020), thanks to the asymmetric per-tensor scheme formalized by Jacob et al.\ (2018) and implemented as the canonical pattern in most modern inference toolchains.
+
+Below int8, the precision/accuracy trade-off degrades sharply. Gholami et al.\ (2021) conclude that maintaining meaningful accuracy at sub-byte precisions requires either quantization-aware training or specialized network architectures.
+
+The literature thus establishes int8 as the sweet spot: above it, the precision trade-off is essentially free; below it, accuracy degrades sharply without specialized training. This report investigates how TVM (Chen et al.\ 2018), a deep learning compiler, behaves across this boundary through its \texttt{relay.quantize} API. We compile and benchmark ResNet50 at fp32 and int8 on x86, analyze why the expected int8 speedup does not materialize with TVM's defaults, test what happens at int4, int2, and int1, and cross-compile both fp32 and int8 to ARM for aarch64 execution under QEMU emulation. Throughout, we anchor TVM's behavior to its source code rather than treating the framework as a black box.
+
+
+\section{TVM Compilation Pipeline}
+
+The workflow has three stages: (1)~import the PyTorch model into TVM's intermediate representation (Relay IR), (2)~optionally apply quantization passes on the IR, and (3)~lower the IR to machine code for a target backend.
+
+\subsection{Model Import}
+
+ResNet50 is loaded from \texttt{torchvision.models} with pretrained \texttt{IMAGENET1K\_V2} weights. To produce a graph representation suitable for TVM, we trace the model with a dummy input of shape \texttt{[1,3,224,224]}:
+
+\begin{lstlisting}[language=Python]
+scripted = torch.jit.trace(model, torch.randn(1, 3, 224, 224)).eval()
+mod, params = relay.frontend.from_pytorch(
+    scripted, [("input0", (1,3,224,224))])
+\end{lstlisting}
+
+This produces two objects from the converted TorchScript graph:
+\begin{itemize}
+  \item \texttt{mod} -- the computation graph in Relay IR
+  \item \texttt{params} -- the trained weights
+\end{itemize}
+
+\subsection{Baseline Compilation (fp32)}
+
+We compile the Relay IR to x86 machine code by specifying a target. The target tells TVM which instruction set to emit, in this case LLVM's x86 backend. For GPU compilation, this would be replaced with \texttt{cuda}.
+
+The build runs inside \texttt{PassContext(opt\_level=3)}, which enables TVM's optimization passes: operator fusion, constant folding, and layout transformation. The last is why TVM's logs show \texttt{conv2d\_NCHWc} rather than \texttt{conv2d} -- TVM rewrites the data layout from NCHW to a tiled format optimized for the x86 cache hierarchy.
+
+\begin{lstlisting}[language=Python]
+target = tvm.target.Target("llvm", host="llvm")
+with tvm.transform.PassContext(opt_level=3):
+    lib = relay.build(mod, target=target, params=params)
+\end{lstlisting}
+
+The result is a compiled module containing generated machine code. We can inspect the compiled code at multiple levels. \texttt{lib.get\_source("ll")} returns the LLVM IR (the intermediate representation just before machine code emission), and \texttt{lib.get\_source("asm")} returns the generated assembly. For example, examining the LLVM IR reveals the \texttt{conv2d\_NCHWc} kernel implementation with vectorized loop nests, confirming that TVM's code generation produced real compute kernels rather than simply dispatching to an external library.
+
+The compiled module is loaded into a \texttt{GraphModule} executor. We feed it a random fp32 input and benchmark over 100 runs.
+
+\begin{lstlisting}[language=Python]
+m = graph_executor.GraphModule(lib["default"](dev))
+m.set_input("input0", tvm.nd.array(img))
+timing = m.benchmark(dev, number=100)
+\end{lstlisting}
+
+\subsection{Int8 Quantization}
+
+TVM applies post-training quantization directly on the Relay IR -- no retraining or calibration dataset is needed. The \texttt{quantize.qconfig} context manager controls all quantization parameters:
+
+\begin{lstlisting}[language=Python]
+with quantize.qconfig(
+    nbit_input=8, nbit_weight=8, nbit_activation=32,
+    dtype_input="int8", dtype_weight="int8",
+    dtype_activation="int32",
+    calibrate_mode="global_scale", global_scale=8.0,
+    skip_dense_layer=True, skip_conv_layers=[0],
+):
+    mod_int8 = quantize.quantize(mod, params=params)
+\end{lstlisting}
+
+\texttt{nbit\_input} and \texttt{nbit\_weight} control quantization precision -- the parameter we vary later when testing sub-byte widths. The default values for every key here are defined in \texttt{QConfig.\_node\_defaults} in \texttt{python/tvm/relay/quantize/\allowbreak quantize.py}, with a matching C++ definition in \texttt{src/relay/quantize/quantize.h}. This is why TVM ``knows'' to quantize to int8 even when \texttt{dtype\_input} is not explicitly set: it is a baked-in framework default.
+
+\texttt{calibrate\_mode="global\_scale"} uses a fixed scaling factor rather than running calibration data through the network; this is acceptable since we are benchmarking throughput, not accuracy. \texttt{skip\_conv\_layers=[0]} leaves the first convolution in fp32, a common practice since the input layer has only 3 channels and quantizing it yields minimal savings. \texttt{skip\_dense\_layer=True} keeps the final classifier layer in fp32.
+
+We verify that quantization took effect by printing the IR: \texttt{mod} shows float32 operations throughout, while \texttt{mod\_int8} shows int8 casts and quantized convolutions. This confirms that \texttt{quantize.quantize} transformed the computation graph rather than merely annotating it. Internally, this transformation is implemented in three phases -- \emph{Annotate}, \emph{Calibrate}, and \emph{Realize} -- with the operator-level rewriting performed in \texttt{src/relay/quantize/realize.cc} via per-op rules (\texttt{Conv2dRealize}, \texttt{AddRealize}, \texttt{MulRealize}, \texttt{ClipRealize}, etc.).
+
+The quantized module is then compiled and benchmarked identically to the fp32 baseline:
+
+\begin{lstlisting}[language=Python]
+with tvm.transform.PassContext(opt_level=3):
+    lib_int8 = relay.build(mod_int8, target=target,
+                           params=params)
+\end{lstlisting}
+
+
+\section{Results}
+
+\subsection{Benchmarking: fp32 vs int8}
+
+We benchmarked both models on x86 CPU (LLVM backend) over 100 inference runs each. All measurements were collected under the same conditions in a single session on a WSL2 host. The results:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Config} & \textbf{Mean (ms)} & \textbf{Median (ms)} & \textbf{Std (ms)} \\
+\midrule
+float32          & 88.04  & 87.98  & 0.43 \\
+int8 (signed)    & 228.55 & 228.00 & 1.46 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+We expected int8 to be at least as fast as fp32, and potentially several-fold faster on hardware with int8 acceleration. Instead, the int8 model is $2.6\times$ slower than fp32. Two factors explain this.
+
+\paragraph{Lack of autotuning.} TVM prints the warning ``One or more operators have not been tuned. Please tune your model for better performance.'' Without autotuning, TVM falls back to generic schedules for every operator. TVM's autotuners (AutoTVM, Ansor) would search for optimal loop tiling, vectorization, and parallelization parameters for each operator shape on the target hardware. Without this step, the default schedules are naive and far from optimal.
+
+\paragraph{Requantization overhead.} The int8 computation graph is significantly more complex than fp32. Examining the \texttt{te\_compiler} dispatch logs and the post-Realize IR, each convolution block in fp32 consists of three operations:
+
+\begin{lstlisting}
+conv2d_NCHWc -> add -> relu
+\end{lstlisting}
+
+In int8, the same logical convolution becomes a chain of 13 operations:
+
+\begin{lstlisting}
+conv2d_NCHWc -> add -> right_shift -> clip -> cast ->
+cast -> multiply -> add -> relu -> add ->
+right_shift -> clip -> cast
+\end{lstlisting}
+
+The extra operations (\texttt{right\_shift}, \texttt{clip}, \texttt{cast}, \texttt{multiply}) implement the dequantization arithmetic: after computing in the int32 accumulator, the result must be rescaled (via a fixed-point multiplier or shift, depending on which path \texttt{MulAndDiv} in \texttt{realize.cc} selects), clipped to the int8 range, and cast back. This 13-op chain replaces every convolution in the network, and additional requantization ops appear around the residual additions that join the ResNet bottleneck blocks.
+
+\paragraph{Dispatch hypothesis.} For int8 to be faster than fp32, TVM would need to dispatch the convolutions to a hardware-accelerated kernel. Tracing the dispatch logic, we find that \texttt{conv2d\_NCHWc\_\allowbreak strategy\_cpu} (in \texttt{python/tvm/relay/op/strategy/x86.py}) chooses between two kernel implementations based on the helper \texttt{is\_int8\_hw\_support} (defined in \texttt{python/tvm/topi/x86/\allowbreak conv2d\_int8.py}). That helper requires \texttt{data\_dtype == "uint8"} \emph{and} \texttt{kernel\_dtype == "int8"} -- an asymmetric pairing inherited from Intel's \texttt{VPDPBUSD} intrinsic (visible in \texttt{python/tvm/topi/x86/\allowbreak tensor\_intrin.py}), which operates on byte-\emph{unsigned} $\times$ \emph{signed}-byte $\rightarrow$ int32. TVM's default qconfig produces \emph{signed} int8 for both data and weights, so the dispatch falls through to the generic \texttt{conv2d\_\allowbreak NCHWc.x86} kernel rather than the VNNI-accelerated \texttt{conv2d\_\allowbreak NCHWc\_int8.x86} path. The int8 graph thus pays the requantization overhead without gaining any compute throughput advantage. This dispatch hypothesis is tested empirically in Section~4.2, where the same int8 graph is cross-compiled to an ARM target with a different operator strategy.
+
+In a separate experiment we tested the VNNI-preferred configuration directly (\texttt{dtype\_input="uint8"}, \texttt{dtype\_weight="int8"}). In that session the uint8/int8 configuration measured 330.19\,ms versus 365.64\,ms for signed int8/int8 -- marginally faster (${\sim}10\%$), but still far slower than the fp32 baseline (${\sim}88$\,ms, measured in the earlier session under the same hardware). This is consistent with the absence of autotuning being the dominant factor on x86: even on the dispatch-preferred path, untuned schedules cannot beat the simpler fp32 graph.
+
+\subsection{Sub-byte Quantization: int4, int2, int1}
+
+The \texttt{qconfig} API accepts arbitrary bit widths through \texttt{nbit\_input} and \texttt{nbit\_weight}. We tested int4, int2, and int1 to determine which precisions TVM can handle end-to-end.
+
+\subsubsection{int4 (4-bit)}
+
+Quantization succeeded: \texttt{quantize.quantize()} returned a valid Relay module with int4 dtypes present in the IR (461 occurrences of ``int4'' in the IR text). However, \texttt{relay.build()} failed during LLVM code generation. The error originates in \texttt{CodeGenLLVM::\allowbreak BufferAccessHelper} (\texttt{src/target/llvm/\allowbreak codegen\_llvm.cc}), where the assertion \texttt{ICHECK\_GE(value\_dtype.\allowbreak bits(), 8)} fails. This encodes the architectural assumption that buffer access dtypes must be at least byte-sized. TVM's LLVM codegen has no support for sub-byte integer types.
+
+\subsubsection{int2 (2-bit)}
+
+The process entered a non-terminating loop during the quantization step itself, before \texttt{relay.build} was even invoked. Using Python's \texttt{faulthandler} with periodic stack dumps (every 30 seconds), we located the hang inside \texttt{prerequisite\_optimize} (\texttt{python/tvm/relay/\allowbreak quantize/\allowbreak quantize.py:329}), which runs standard Relay optimization passes (\texttt{SimplifyInference}, \texttt{FoldConstant}, \texttt{FoldScaleAxis}, \texttt{CanonicalizeOps}) on the float32 module before quantization. The process consumed ${\sim}97\%$ CPU on a single core with stable memory, and eventually segfaulted. The int2 dtype is not yet present in the IR at this stage (these passes run on the float32 module), but the active \texttt{qconfig} influences pass behavior through shared state.
+
+\subsubsection{int1 (1-bit)}
+
+Quantization succeeded, but \texttt{relay.build()} raised an \texttt{InternalError} with a clear stack trace. The failure occurs in the \texttt{SimplifyExpr} optimization pass (\texttt{src/relay/transforms/\allowbreak simplify\_expr.cc}), in \texttt{CheckDataTypeMaxMinValue} which validates a clip op's bounds against its target dtype. TVM treats \texttt{DataType::Int(1)} as effectively boolean with range $[0, 1]$, so constructing \texttt{IntImm(int1, -1)} for the quantization-generated clip's lower bound fails the range assertion:
+
+\begin{lstlisting}
+Check failed: (value == 0 || value == 1) is false:
+ValueError: -1 exceeds range of int1
+\end{lstlisting}
+
+The error path is: \texttt{relay.build} $\rightarrow$ \texttt{OptimizeImpl} $\rightarrow$ \texttt{SimplifyExpr} $\rightarrow$ \texttt{SimplifyClipAnd\-Consecutive\-Cast::\allowbreak Callback} $\rightarrow$ \texttt{CheckDataTypeMaxMinValue} $\rightarrow$ \texttt{tvm::min\_value(int1)} $\rightarrow$ \texttt{IntImm(int1, -1)} $\rightarrow$ assertion failure.
+
+\subsubsection{Summary of Sub-byte Failures}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccl}
+\toprule
+\textbf{Precision} & \textbf{Quantize} & \textbf{Build} & \textbf{Failure Location} \\
+\midrule
+int8 & OK   & OK   & (works) \\
+int4 & OK   & FAIL & LLVM codegen: \texttt{bits} $\geq$ 8 \\
+int2 & HANG/CRASH & N/A & \texttt{prerequisite\_optimize} loop \\
+int1 & OK   & FAIL & \texttt{SimplifyExpr}: int1 range \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+These three failure modes confirm that TVM's quantization framework (Annotate $\rightarrow$ Calibrate $\rightarrow$ Realize) is dtype-agnostic and accepts arbitrary \texttt{DataType::Int(N)} values without validation. The breakdown happens downstream when optimization or codegen passes encounter the resulting IR. Each pass imposes its own dtype-specific assumptions, and there is no unified validation layer. The framework fails at varied stages, with varied symptoms ranging from clean exceptions to non-terminating loops, depending on which assumption is violated first.
+
+
+\section{Cross-Compilation for ARM}
+
+\subsection{Compiling for Raspberry Pi}
+
+To target the Raspberry Pi 4 (Cortex-A72), we change the compilation target string to specify the ARM instruction set:
+
+\begin{lstlisting}[language=Python]
+target = tvm.target.Target(
+    "llvm -device=arm_cpu "
+    "-mtriple=aarch64-linux-gnu "
+    "-mcpu=cortex-a72"
+)
+\end{lstlisting}
+
+The target triple \texttt{aarch64-linux-gnu} instructs LLVM to emit 64-bit ARM code for Linux, and \texttt{mcpu=\allowbreak cortex-a72} enables microarchitecture-specific optimizations for the Pi~4's CPU. Cortex-A72 is an ARMv8-A core with standard NEON SIMD; it does not include the dot-product instructions introduced in ARMv8.2+.
+
+Since we are cross-compiling (building ARM binaries on an x86 host), we use \texttt{aarch64-linux-gnu-gcc} as the cross-compiler when emitting the shared library:
+
+\begin{lstlisting}[language=Python]
+from tvm.contrib import cc as _cc
+
+def cross_cc(output, files, options=None,
+             cc="aarch64-linux-gnu-gcc"):
+    return _cc.create_shared(output, files,
+                             options, cc=cc)
+
+lib.export_library("resnet50_fp32_arm.so",
+                   fcompile=cross_cc)
+\end{lstlisting}
+
+Both the fp32 and int8 models are exported as three files each:
+\begin{itemize}
+  \item \texttt{.so} -- the compiled shared library containing operator kernels
+  \item \texttt{.json} -- the graph structure (execution order, operator names, shapes)
+  \item \texttt{.params} -- the serialized weights
+\end{itemize}
+
+This produces six files total. The aarch64 ELF format of each \texttt{.so} was verified with the \texttt{file} utility:
+
+\begin{lstlisting}
+$ file resnet50_fp32_arm.so
+resnet50_fp32_arm.so: ELF 64-bit LSB shared object,
+ARM aarch64, version 1 (SYSV), dynamically linked,
+with debug_info, not stripped
+\end{lstlisting}
+
+The int8 \texttt{.params} file is 30\,MB versus 191\,MB for fp32, confirming the storage benefit of int8 quantization independent of any compute-side speedup.
+
+\subsection{QEMU Emulation}
+
+To execute the cross-compiled binaries without physical Raspberry Pi hardware, we set up full-system emulation under \texttt{qemu-system-aarch64} using the \texttt{raspi3b} machine type with a Cortex-A53 CPU and 1\,GB RAM. Although the compiled code targets Cortex-A72 microarchitecture-specific scheduling, both A53 and A72 are ARMv8-A cores with the same NEON SIMD ISA, so the compiled kernels execute correctly under A53 emulation. After booting a Raspberry Pi OS image and confirming \texttt{uname -m} returns \texttt{aarch64}, we installed Python, NumPy, and the TVM v0.15.0 runtime inside the VM (\texttt{make runtime} with \texttt{USE\_LLVM=OFF}). The six exported model files were provided to the VM via a USB storage image.
+
+A small benchmark script inside the VM loads each artifact triple via \texttt{tvm.runtime.\allowbreak load\_module}, \texttt{graph\_executor.create}, and \texttt{load\_params}, runs a single warmup iteration, and measures latency using TVM's \texttt{benchmark()} API with \texttt{number=2, repeat=3} (kept low because of QEMU overhead).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Config} & \textbf{Mean (ms)} & \textbf{Median (ms)} \\
+\midrule
+float32 (aarch64, QEMU) & 9550.5 & 9603.8 \\
+int8    (aarch64, QEMU) & 4619.2 & 4693.5 \\
+\bottomrule
+\end{tabular}
+\caption{ResNet50 inference latency under QEMU full-system emulation (raspi3b machine, Cortex-A53 CPU). Each measurement is the mean of three repeats of two inferences each, preceded by a single warmup run. QEMU adds roughly $30$--$50\times$ overhead relative to native execution, so absolute values do \emph{not} represent real Raspberry Pi performance; the ratio between fp32 and int8, however, is informative because both configurations incur the same emulation cost.}
+\end{table}
+
+Two observations stand out. First, both models produced sensible classification outputs (fp32 \texttt{argmax}=21, int8 \texttt{argmax}=812, with output ranges spanning several units around zero). The different argmax values are expected: with a random (non-ImageNet) input and coarse global-scale calibration, the int8 approximation diverges from fp32 in its top prediction while still producing a plausible class-score distribution, confirming that the cross-compiled aarch64 binaries execute correctly. Second, and more interestingly, under aarch64 emulation the int8 model runs \textbf{$2.07\times$ \emph{faster}} than fp32 -- the opposite of what we measured on x86, where int8 was $2.6\times$ \emph{slower}.
+
+This inversion is direct empirical support for the dispatch hypothesis developed in Section~3.1. On x86, TVM's optimized int8 conv kernel requires a \texttt{uint8 $\times$ int8} dtype pairing dictated by the asymmetric \texttt{VPDPBUSD} intrinsic, which the default qconfig does not produce, so dispatch falls through to a generic kernel. On aarch64, the int8 kernel paths in TVM's ARM operator strategy (under \texttt{python/tvm/topi/arm\_cpu/}) do not impose the same asymmetric requirement, and signed int8 inputs and weights flow through int8-specific schedules that benefit both from reduced data movement and from NEON's vectorized integer multiply-accumulate. The expected quantization speedup materializes -- even under QEMU's substantial emulation overhead. The bottleneck on x86 was therefore the specific interaction between TVM's default qconfig and the platform's dispatch logic, not int8 quantization itself.
+
+
+\subsection{Inspecting the Compiled Module}
+
+After compilation, TVM's compiled module is not a black box -- we can inspect the generated code at multiple levels of abstraction. Calling \texttt{lib.get\_lib().get\_source("ll")} returns the full LLVM IR, which reveals the vectorized loop nests TVM generated for each operator. For example, the main convolution kernel appears as a function with packed vector loads and fused multiply-add sequences, confirming that TVM produced real compute code rather than dispatching to an external BLAS library. At a lower level, \texttt{lib.get\_lib().get\_source("asm")} returns the target assembly; on x86, this shows SSE/AVX vector instructions corresponding to the LLVM IR's vector operations.
+
+\begin{lstlisting}[language=Python]
+# inspect generated code at LLVM IR level
+llvm_ir = lib.get_lib().get_source("ll")
+# inspect at assembly level
+asm = lib.get_lib().get_source("asm")
+# inspect the execution graph structure
+graph = json.loads(lib.get_graph_json())
+print(f"Number of nodes: {len(graph['nodes'])}")
+\end{lstlisting}
+
+The graph JSON structure exposes the execution order and operator names. For our fp32 ResNet50, this shows the fused \texttt{conv2d\_NCHWc} operators alongside \texttt{add} and \texttt{relu} nodes, confirming that TVM's operator fusion pass successfully merged element-wise operations into their preceding convolution. This inspection capability is important for diagnosing performance issues: when the int8 model was unexpectedly slow on x86, examining the graph JSON and LLVM IR confirmed that TVM did \emph{not} emit VNNI intrinsics, corroborating the dispatch analysis of Section~3.1.
+
+\subsection{Performance Comparison}
+
+Figure~\ref{fig:comparison} summarizes the latency results across both platforms. On x86, int8 is $2.6\times$ \emph{slower} than fp32 due to the dispatch and requantization issues discussed in Section~3.1. On aarch64 (under QEMU), the relationship inverts: int8 is $2.07\times$ \emph{faster}, demonstrating that the expected quantization speedup materializes when the target's operator strategy accepts signed int8 directly.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar,
+    bar width=18pt,
+    width=0.85\columnwidth,
+    height=6cm,
+    ylabel={Inference Latency (ms)},
+    symbolic x coords={x86, aarch64 (QEMU)},
+    xtick=data,
+    ymin=0,
+    legend style={at={(0.5,0.95)}, anchor=north, legend columns=2},
+    nodes near coords,
+    nodes near coords align={vertical},
+    every node near coord/.append style={font=\scriptsize},
+]
+\addplot coordinates {(x86, 88.04) (aarch64 (QEMU), 9550.5)};
+\addplot coordinates {(x86, 228.55) (aarch64 (QEMU), 4619.2)};
+\legend{fp32, int8}
+\end{axis}
+\end{tikzpicture}
+\caption{ResNet50 inference latency: fp32 vs int8 on x86 (native) and aarch64 (QEMU emulated). Note the inverted relationship: int8 is slower on x86 (dispatch miss) but faster on aarch64 (proper int8 kernel utilization). Absolute values are not comparable across platforms due to QEMU overhead.}
+\label{fig:comparison}
+\end{figure}
+
+
+\section{Conclusion}
+
+This report treated TVM not as a black box but as an inspectable compiler: we read its IR, traced its dispatch logic in source, examined the generated LLVM IR and assembly, and used cross-platform execution to empirically validate a hypothesis derived from code reading. The central finding is that quantization performance is not a property of the precision alone -- it depends on whether the compiler's dispatch logic, the target's ISA constraints, and the qconfig's dtype choices align. When they do (aarch64, signed int8), the textbook ${\sim}2\times$ speedup appears; when they don't (x86, signed int8 vs VNNI's uint8 requirement), quantization \emph{hurts} due to requantization overhead without compensating throughput gains.
+
+Sub-byte quantization revealed a different lesson: TVM's frontend is permissive (it will quantize to any bit width) but the downstream pipeline -- optimization passes, codegen -- is not. The three distinct failure modes at int4, int2, and int1 show that end-to-end dtype support requires coordinated assumptions across every compiler stage, not just the quantization pass itself.
+
+For production deployment, two concrete steps would unlock the expected x86 speedup: (i)~adopting a uint8-input/int8-weight qconfig to hit the VNNI dispatch path, and (ii)~running AutoTVM or Ansor to replace the naive default schedules with hardware-tuned ones. On ARM, targeting ARMv8.2+ cores with dot-product extensions would provide an additional throughput tier beyond the NEON-based speedup we observed. The ${\sim}4\times$ weight compression (30\,MB vs 191\,MB) remains independently valuable for memory-constrained edge deployment regardless of compute-side dispatch.
+
+
+\begin{thebibliography}{9}
+
+\bibitem{chen2018}
+Chen, T., Moreau, T., Jiang, Z., Zheng, L., Yan, E., Cowan, M., Shen, H., Wang, L., Hu, Y., Ceze, L., Guestrin, C., \& Krishnamurthy, A.\ (2018).
+TVM: An Automated End-to-End Optimizing Compiler for Deep Learning.
+In \textit{Proceedings of OSDI '18}.
+
+\bibitem{wu2020}
+Wu, H., Judd, P., Zhang, X., Isaev, M., \& Micikevicius, P.\ (2020).
+Integer Quantization for Deep Learning Inference: Principles and Empirical Evaluation.
+\textit{arXiv:2004.09602}.
+
+\bibitem{gholami2021}
+Gholami, A., Kim, S., Dong, Z., Yao, Z., Mahoney, M.\,W., \& Keutzer, K.\ (2021).
+A Survey of Quantization Methods for Efficient Neural Network Inference.
+\textit{arXiv:2103.13630}.
+
+\bibitem{jacob2018}
+Jacob, B., Kligys, S., Chen, B., Zhu, M., Tang, M., Howard, A., Adam, H., \& Kalenichenko, D.\ (2018).
+Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference.
+In \textit{Proceedings of CVPR '18}, pp.\ 2704--2713.
+
+\end{thebibliography}
+
+\end{document}
