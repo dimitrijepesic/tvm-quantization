@@ -1,0 +1,72 @@
+Sub-byte quantization failure analysis
+=======================================
+
+Each bitwidth fails at a different stage of the TVM pipeline, which reveals
+that there is no unified validation layer — each pass imposes its own
+dtype-specific assumptions independently.
+
+
+int4 native — fails at relay.build(), LLVM codegen stage
+---------------------------------------------------------
+Location: src/target/llvm/codegen_llvm.cc:1716, CodeGenLLVM::BufferAccessHelper
+Assertion: value_dtype.bits() >= 8 — returns false because 4 < 8
+
+LLVM backend assumes memory access must be at least 1 byte. Sub-byte types
+(int4) would require packing — e.g. 8 int4 values into one int32 — but this
+packing was never implemented in the codegen.
+
+quantize.quantize() succeeds and produces valid Relay IR with int4 dtypes
+(461 occurrences of "int4" in the IR text), but relay.build() crashes when
+trying to lower that IR to LLVM.
+
+
+int2 native — SEGFAULT during quantize.quantize()
+--------------------------------------------------
+Location: python/tvm/relay/quantize/quantize.py:329, prerequisite_optimize()
+
+This function runs standard Relay optimization passes (SimplifyInference,
+FoldConstant, FoldScaleAxis, CanonicalizeOps) on the fp32 module *before*
+the actual quantization. The int2 dtype is not yet present in the IR at this
+point, but the active qconfig context affects pass behavior through shared state.
+
+Process enters an infinite loop (~97% CPU, stable memory), eventually segfaults.
+Diagnosed using faulthandler with periodic stack dumps every 30 seconds:
+  - Stack consistently shows the hang inside prerequisite_optimize
+  - Final crash is a segfault (signal 11) inside the C++ extension
+
+Not catchable via try/except — must run in a subprocess.
+
+
+int1 native — fails at relay.build(), SimplifyExpr optimization pass
+--------------------------------------------------------------------
+Location: src/relay/transforms/simplify_expr.cc:170, CheckDataTypeMaxMinValue()
+
+Full error path:
+  relay.build()
+  -> src/relay/backend/build_module.cc:356, OptimizeImpl()
+  -> src/relay/transforms/simplify_expr.cc:1145, SimplifyExpr()
+  -> src/relay/transforms/simplify_expr.cc:221, SimplifyClipAndConsecutiveCast::Callback()
+  -> src/relay/transforms/simplify_expr.cc:170, CheckDataTypeMaxMinValue()
+  -> src/tir/op/op.cc:259, tvm::min_value(DataType::Int(1))
+  -> src/ir/expr.cc:84, IntImm(int1, -1) constructor
+
+The SimplifyExpr pass tries to validate clip op bounds by computing
+min_value(int1). TVM treats DataType::Int(1) as effectively boolean with
+range [0, 1]. Constructing IntImm(int1, -1) for the clip's lower bound
+triggers the assertion:
+
+  Check failed: (value == 0 || value == 1) is false:
+  ValueError: -1 exceeds range of int1
+
+quantize.quantize() succeeds (IR contains 461 "int1" substrings), but
+relay.build() fails with a clean InternalError exception.
+
+
+Summary table
+-------------
+| Bit width | quantize.quantize() | relay.build() | Failure location                    |
+|-----------|---------------------|---------------|-------------------------------------|
+| int8      | OK                  | OK            | (works)                             |
+| int4      | OK                  | FAIL          | LLVM codegen (bits >= 8)            |
+| int2      | SEGFAULT            | N/A           | prerequisite_optimize (infinite loop)|
+| int1      | OK                  | FAIL          | SimplifyExpr (int1 range check)     |

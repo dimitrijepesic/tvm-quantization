@@ -1,0 +1,23 @@
+
+=== fp32 ===
+[fp32] warmup run...
+[fp32] warmup: 12.4s
+[fp32] output shape=(1, 1000), argmax=21, range=[-1.320, 5.283]
+[fp32] benchmarking (number=2, repeat=3)...
+[fp32] Execution time summary:
+ mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)
+ 9550.5471    9603.7632    10325.9847   8721.8933     655.9478
+
+=== int8 ===
+[int8] warmup run...
+[int8] warmup: 3.1s
+[int8] output shape=(1, 1000), argmax=812, range=[-1.844, 5.943]
+[int8] benchmarking (number=2, repeat=3)...
+[int8] Execution time summary:
+ mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)
+ 4619.1570    4693.4738    4888.6200    4275.3771     255.8111
+
+=== summary ===
+fp32: mean=9550.5 ms
+int8: mean=4619.2 ms
+ratio (int8/fp32): 0.48x

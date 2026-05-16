@@ -1,0 +1,46 @@
+>>> uint8 input / int8 weight quantization probe <<<
+
+[setup] loading ResNet50...
+[setup] importing to Relay...
+[setup] target = llvm -keys=cpu
+
+============================================================
+=== int8_signed: dtype_input=int8, dtype_weight=int8
+============================================================
+[int8_signed.1] quantize.quantize()...
+[int8_signed.1] quantize OK
+[int8_signed.1]   IR length: 85018 chars
+[int8_signed.1]   'int8' substring count: 461
+[int8_signed.2] relay.build()...
+[int8_signed.2] build OK
+[int8_signed.3]   argmax=812, range=[-1.863, 5.892], unique=1000
+[int8_signed.4] benchmarking (number=100)...
+[int8_signed.4] Execution time summary:
+   mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)
+    365.64       364.81        372.15       363.49        1.83
+
+============================================================
+=== uint8_input: dtype_input=uint8, dtype_weight=int8
+============================================================
+[uint8_input.1] quantize.quantize()...
+[uint8_input.1] quantize OK
+[uint8_input.1]   IR length: 85427 chars
+[uint8_input.1]   'uint8' substring count: 409
+[uint8_input.1]   'int8' substring count: 461
+[uint8_input.2] relay.build()...
+[uint8_input.2] build OK
+[uint8_input.3]   argmax=600, range=[-15.424, 26.171], unique=1000
+[uint8_input.4] benchmarking (number=100)...
+[uint8_input.4] Execution time summary:
+   mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)
+    330.19       329.54        337.22       328.11        1.92
+
+============================================================
+SUMMARY
+============================================================
+config                  mean (ms)   argmax   unique                  range
+int8_signed                365.64      812     1000       [-1.86, 5.89]
+uint8_input                330.19      600     1000      [-15.42, 26.17]
+
+note: uint8 is ~10% faster than int8 but both are slower than fp32 (~88ms)
+      without autotuning, neither path can beat the simpler fp32 graph

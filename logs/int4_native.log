@@ -1,0 +1,16 @@
+>>> Native int4 quantization probe (instrumented) <<<
+
+[1] Loading ResNet50...
+[2] Converting to Relay...
+[3] Quantizing with nbit=4, dtype='int4'...
+[3] Quantize succeeded.
+[4] Inspecting quantized IR...
+[4]   IR length: 75610 chars
+[4]   Count of 'int4' substring: 461
+[5] BEFORE relay.build
+[5.1] Inside PassContext, about to call relay.build
+
+Build fails at LLVM codegen stage:
+  src/target/llvm/codegen_llvm.cc:1716, CodeGenLLVM::BufferAccessHelper
+  assertion: value_dtype.bits() >= 8
+  Sub-byte types (int4) require packing which the codegen does not implement.

@@ -1,0 +1,8 @@
+One or more operators have not been tuned. Please tune your model for better performance. Use DEBUG logging level to see more details.
+float32:     Execution time summary:
+ mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)
+  88.0412      87.9798      88.7295      87.4947       0.4309
+int8:     Execution time summary:
+ mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)
+  228.5546     227.9952     230.6842     226.7380      1.4610
+ok

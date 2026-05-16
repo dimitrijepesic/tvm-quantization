@@ -1,0 +1,19 @@
+>>> Native int2 quantization probe (with periodic stack dumps) <<<
+
+[1] Loading ResNet50...
+[2] Converting to Relay...
+[3] Entering quantize.qconfig context with nbit=2, dtype='int2'...
+[3.1] Calling quantize.quantize() — this is where it hangs
+Timeout (0:00:30)!
+Thread 0x00007f3fac031000 (most recent call first):
+  File "tvm/python/tvm/_ffi/_ctypes/packed_func.py", line 229 in __call__
+  File "tvm/python/tvm/ir/transform.py", line 160 in __call__
+  File "tvm/python/tvm/relay/quantize/quantize.py", line 329 in prerequisite_optimize
+  File "tvm/python/tvm/relay/quantize/quantize.py", line 356 in quantize
+Fatal Python error: Segmentation fault
+
+Current thread 0x00007f3fac031000 (most recent call first):
+  File "tvm/python/tvm/_ffi/_ctypes/packed_func.py", line 86 in cfun
+  File "tvm/python/tvm/_ffi/_ctypes/packed_func.py", line 229 in __call__
+  File "tvm/python/tvm/ir/transform.py", line 160 in __call__
+  File "tvm/python/tvm/relay/quantize/quantize.py", line 370 in quantize

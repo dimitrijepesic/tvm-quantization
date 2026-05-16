@@ -1,0 +1,16 @@
+>>> Native int1 quantization probe (instrumented) <<<
+
+[1] Loading ResNet50...
+[2] Converting to Relay...
+[3] Quantize succeeded.
+[4] Inspecting quantized IR...
+[4]   IR length: 75610 chars
+[4]   Count of 'int1' substring: 461
+[5] BEFORE relay.build
+[5.1] Inside PassContext, about to call relay.build
+[5.X] EXCEPTION during build: InternalError:
+  File "tvm/src/ir/expr.cc", line 84
+  InternalError: Check failed: (value == 0 || value == 1) is false: ValueError: -1 exceeds range of int1
+
+Error path: relay.build -> OptimizeImpl -> SimplifyExpr -> SimplifyClipAndConsecutiveCast::Callback
+  -> CheckDataTypeMaxMinValue -> tvm::min_value(int1) -> IntImm(int1, -1) -> assertion failure
