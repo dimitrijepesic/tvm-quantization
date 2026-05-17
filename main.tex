@@ -158,7 +158,7 @@ The extra operations (\texttt{right\_shift}, \texttt{clip}, \texttt{cast}, \text
 
 \paragraph{Dispatch hypothesis.} For int8 to be faster than fp32, TVM would need to dispatch the convolutions to a hardware-accelerated kernel. Tracing the dispatch logic, we find that \texttt{conv2d\_NCHWc\_\allowbreak strategy\_cpu} (in \texttt{python/tvm/relay/op/strategy/x86.py}) chooses between two kernel implementations based on the helper \texttt{is\_int8\_hw\_support} (defined in \texttt{python/tvm/topi/x86/\allowbreak conv2d\_int8.py}). That helper requires \texttt{data\_dtype == "uint8"} \emph{and} \texttt{kernel\_dtype == "int8"} -- an asymmetric pairing inherited from Intel's \texttt{VPDPBUSD} intrinsic (visible in \texttt{python/tvm/topi/x86/\allowbreak tensor\_intrin.py}), which operates on byte-\emph{unsigned} $\times$ \emph{signed}-byte $\rightarrow$ int32. TVM's default qconfig produces \emph{signed} int8 for both data and weights, so the dispatch falls through to the generic \texttt{conv2d\_\allowbreak NCHWc.x86} kernel rather than the VNNI-accelerated \texttt{conv2d\_\allowbreak NCHWc\_int8.x86} path. The int8 graph thus pays the requantization overhead without gaining any compute throughput advantage. This dispatch hypothesis is tested empirically in Section~4.2, where the same int8 graph is cross-compiled to an ARM target with a different operator strategy.
 
-In a separate experiment we tested the VNNI-preferred configuration directly (\texttt{dtype\_input="uint8"}, \texttt{dtype\_weight="int8"}). In that session the uint8/int8 configuration measured 330.19\,ms versus 365.64\,ms for signed int8/int8 -- marginally faster (${\sim}10\%$), but still far slower than the fp32 baseline (${\sim}88$\,ms, measured in the earlier session under the same hardware). This is consistent with the absence of autotuning being the dominant factor on x86: even on the dispatch-preferred path, untuned schedules cannot beat the simpler fp32 graph.
+In a separate experiment we tested the VNNI-preferred configuration directly (\texttt{dtype\_input="uint8"}, \texttt{dtype\_weight="int8"}). Run together in a single session for a controlled comparison, signed int8/int8 measured 365.64\,ms and uint8/int8 measured 330.19\,ms. Both are higher than the 228\,ms shown for signed int8/int8 in the table above because the two sessions ran at different times on the same hardware -- only the within-session comparison is controlled. The within-session result is that uint8/int8 is marginally faster (${\sim}10\%$) than signed int8/int8, and both remain far slower than the fp32 baseline (${\sim}88$\,ms). This is consistent with the absence of autotuning being the dominant factor on x86: even on the dispatch-preferred path, untuned schedules cannot beat the simpler fp32 graph.
 
 \subsection{Sub-byte Quantization: int4, int2, int1}
 
@@ -200,6 +200,22 @@ int1 & OK   & FAIL & \texttt{SimplifyExpr}: int1 range \\
 \end{table}
 
 These three failure modes confirm that TVM's quantization framework (Annotate $\rightarrow$ Calibrate $\rightarrow$ Realize) is dtype-agnostic and accepts arbitrary \texttt{DataType::Int(N)} values without validation. The breakdown happens downstream when optimization or codegen passes encounter the resulting IR. Each pass imposes its own dtype-specific assumptions, and there is no unified validation layer. The framework fails at varied stages, with varied symptoms ranging from clean exceptions to non-terminating loops, depending on which assumption is violated first.
+
+\subsection{Inspecting the Compiled Module}
+
+After compilation, TVM's compiled module is not a black box -- we can inspect the generated code at multiple levels of abstraction. Calling \texttt{lib.get\_lib().get\_source("ll")} returns the full LLVM IR, which reveals the vectorized loop nests TVM generated for each operator. For example, the main convolution kernel appears as a function with packed vector loads and fused multiply-add sequences, confirming that TVM produced real compute code rather than dispatching to an external BLAS library. At a lower level, \texttt{lib.get\_lib().get\_source("asm")} returns the target assembly; on x86, this shows SSE/AVX vector instructions corresponding to the LLVM IR's vector operations.
+
+\begin{lstlisting}[language=Python]
+# inspect generated code at LLVM IR level
+llvm_ir = lib.get_lib().get_source("ll")
+# inspect at assembly level
+asm = lib.get_lib().get_source("asm")
+# inspect the execution graph structure
+graph = json.loads(lib.get_graph_json())
+print(f"Number of nodes: {len(graph['nodes'])}")
+\end{lstlisting}
+
+The graph JSON structure exposes the execution order and operator names. For our fp32 ResNet50, this shows the fused \texttt{conv2d\_NCHWc} operators alongside \texttt{add} and \texttt{relu} nodes, confirming that TVM's operator fusion pass successfully merged element-wise operations into their preceding convolution. This inspection capability is important for diagnosing performance issues: when the int8 model was unexpectedly slow on x86, examining the graph JSON and LLVM IR confirmed that TVM did \emph{not} emit VNNI intrinsics, corroborating the dispatch analysis of Section~3.1.
 
 
 \section{Cross-Compilation for ARM}
@@ -273,22 +289,6 @@ Two observations stand out. First, both models produced sensible classification 
 
 This inversion is direct empirical support for the dispatch hypothesis developed in Section~3.1. On x86, TVM's optimized int8 conv kernel requires a \texttt{uint8 $\times$ int8} dtype pairing dictated by the asymmetric \texttt{VPDPBUSD} intrinsic, which the default qconfig does not produce, so dispatch falls through to a generic kernel. On aarch64, the int8 kernel paths in TVM's ARM operator strategy (under \texttt{python/tvm/topi/arm\_cpu/}) do not impose the same asymmetric requirement, and signed int8 inputs and weights flow through int8-specific schedules that benefit both from reduced data movement and from NEON's vectorized integer multiply-accumulate. The expected quantization speedup materializes -- even under QEMU's substantial emulation overhead. The bottleneck on x86 was therefore the specific interaction between TVM's default qconfig and the platform's dispatch logic, not int8 quantization itself.
 
-
-\subsection{Inspecting the Compiled Module}
-
-After compilation, TVM's compiled module is not a black box -- we can inspect the generated code at multiple levels of abstraction. Calling \texttt{lib.get\_lib().get\_source("ll")} returns the full LLVM IR, which reveals the vectorized loop nests TVM generated for each operator. For example, the main convolution kernel appears as a function with packed vector loads and fused multiply-add sequences, confirming that TVM produced real compute code rather than dispatching to an external BLAS library. At a lower level, \texttt{lib.get\_lib().get\_source("asm")} returns the target assembly; on x86, this shows SSE/AVX vector instructions corresponding to the LLVM IR's vector operations.
-
-\begin{lstlisting}[language=Python]
-# inspect generated code at LLVM IR level
-llvm_ir = lib.get_lib().get_source("ll")
-# inspect at assembly level
-asm = lib.get_lib().get_source("asm")
-# inspect the execution graph structure
-graph = json.loads(lib.get_graph_json())
-print(f"Number of nodes: {len(graph['nodes'])}")
-\end{lstlisting}
-
-The graph JSON structure exposes the execution order and operator names. For our fp32 ResNet50, this shows the fused \texttt{conv2d\_NCHWc} operators alongside \texttt{add} and \texttt{relu} nodes, confirming that TVM's operator fusion pass successfully merged element-wise operations into their preceding convolution. This inspection capability is important for diagnosing performance issues: when the int8 model was unexpectedly slow on x86, examining the graph JSON and LLVM IR confirmed that TVM did \emph{not} emit VNNI intrinsics, corroborating the dispatch analysis of Section~3.1.
 
 \subsection{Performance Comparison}
 
