@@ -253,7 +253,7 @@ tvmgen_default_fused_layout_transform:
 Graph JSON excerpt (first 2000 chars):
 ======================================================================
 Number of nodes: 215
-Node op types: {'tvm_op', 'null'}
+Node op types: {'null', 'tvm_op'}
 
 First 20 nodes:
   [  0] op=null         name=input0

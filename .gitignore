@@ -1,0 +1,28 @@
+# Cross-compiled ARM artifacts (regenerable via experiments/03_cross_compile_arm.py)
+# fp32 .params ~ 191 MB, int8 .params ~ 30 MB, .so ~ 200 / 33 MB
+experiments/resnet50_*_arm.so
+experiments/resnet50_*_arm.params
+experiments/resnet50_*_arm.json
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pkl_memoize_py3/
+
+# LaTeX intermediates in the project root only — keep logs/*.log!
+/main.aux
+/main.log
+/main.out
+/main.toc
+/main.synctex.gz
+/main.fls
+/main.fdb_latexmk
+/*.bbl
+/*.blg
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

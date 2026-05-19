@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# pytorch inference runner for raspberry pi (qemu)
-# fallback when tvm runtime is not available
-# benchmarks resnet50 in float32 and int8 (dynamic quantization)
+# pytorch inference runner for aarch64 ubuntu under qemu (virt machine, cortex-a72)
+# fallback when tvm runtime is not available inside the guest
+# benchmarks resnet50 in float32 and int8 (pytorch dynamic quantization)
 import time
 import os
 import numpy as np
@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-MODEL_DIR = "/home/pi/models"
+MODEL_DIR = "/home/ubuntu"
 INPUT_SHAPE = (1, 3, 224, 224)
 NUM_WARMUP = 2
 NUM_RUNS = 10

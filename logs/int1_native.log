@@ -1,16 +1,203 @@
 >>> Native int1 quantization probe (instrumented) <<<
+>>> PID: 28695 <<<
 
 [1] Loading ResNet50...
 [2] Converting to Relay...
+[3] BEFORE quantize.qconfig context
+[3.1] Entering qconfig context with nbit=1, dtype='int1'...
+[3.2] Inside qconfig context, calling quantize.quantize()...
+[3.3] quantize.quantize() returned!
 [3] Quantize succeeded.
 [4] Inspecting quantized IR...
 [4]   IR length: 75610 chars
+[4]   First 500 chars of IR:
+def @main(%input0: Tensor[(1, 3, 224, 224), float32] /* ty=Tensor[(1, 3, 224, 224), float32] span=aten::_convolution_0.input0:0:0 */) -> Tensor[(1, 1000), float32] {
+  %0 = nn.conv2d(%input0, meta[relay.Constant][0] /* ty=Tensor[(64, 3, 7, 7), float32] */, strides=[2, 2], padding=[3, 3, 3, 3], channels=64, kernel_size=[7, 7]) /* ty=Tensor[(1, 64, 112, 112), float32] span=aten::_convolution_0:0:0 */;
+  %1 = annotation.stop_fusion(%0) /* ty=Tensor[(1, 64, 112, 112), float32] */;
+  %2 = multiply(%1
 [4]   Count of 'int1' substring: 461
 [5] BEFORE relay.build
 [5.1] Inside PassContext, about to call relay.build
-[5.X] EXCEPTION during build: InternalError:
-  File "tvm/src/ir/expr.cc", line 84
-  InternalError: Check failed: (value == 0 || value == 1) is false: ValueError: -1 exceeds range of int1
-
-Error path: relay.build -> OptimizeImpl -> SimplifyExpr -> SimplifyClipAndConsecutiveCast::Callback
-  -> CheckDataTypeMaxMinValue -> tvm::min_value(int1) -> IntImm(int1, -1) -> assertion failure
+[5.X] EXCEPTION during build: InternalError: Traceback (most recent call last):
+  32: tvm::relay::backend::RelayBuildModule::GetFunction(tvm::runtime::String const&, tvm::runtime::ObjectPtr<tvm::runtime::Object> const&)::{lambda(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*)#3}::operator()(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*) const
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc:185
+  31: tvm::relay::backend::RelayBuildModule::Build(tvm::IRModule, tvm::runtime::Array<tvm::Target, void> const&, tvm::Target const&, tvm::relay::Executor const&, tvm::relay::Runtime const&, tvm::WorkspaceMemoryPools const&, tvm::ConstantMemoryPools const&, tvm::runtime::String)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc:309
+  30: tvm::relay::backend::RelayBuildModule::BuildRelay(tvm::IRModule, tvm::runtime::String const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc:419
+  29: tvm::relay::backend::RelayBuildModule::OptimizeImpl(tvm::IRModule)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc:356
+  28: tvm::relay::transform::FunctionPassNode::operator()(tvm::IRModule, tvm::transform::PassContext const&) const
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/transform.cc:133
+  27: unpack_call<tvm::relay::Function, 3, tvm::relay::transform::SimplifyExpr()::<lambda(tvm::relay::Function, tvm::IRModule, tvm::relay::transform::PassContext)> >
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc:1145
+  26: tvm::relay::SimplifyExpr(tvm::RelayExpr const&, tvm::IRModule const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc:1124
+  25: tvm::relay::RewritePatterns(tvm::runtime::Array<tvm::relay::DFPatternCallback, void>, tvm::RelayExpr, tvm::IRModule)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc:863
+  24: tvm::relay::PatternRewriter::Rewrite(tvm::runtime::Array<tvm::relay::DFPatternCallback, void> const&, tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc:824
+  23: tvm::relay::MixedModeMutator::VisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:102
+  22: ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:509
+  21: ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >(tvm::relay::Expr, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>)::<lambda(const Expr&)> >
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:468
+  20: operator()
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:98
+  19: tvm::relay::MixedModeMutator::VisitLeaf(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:81
+  18: tvm::relay::PatternRewriter::DispatchVisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc:844
+  17: tvm::relay::MixedModeMutator::DispatchVisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:94
+  16: tvm::relay::ExprMutator::VisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:158
+  15: tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::VisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:95
+  14: tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::InitVTable()::{lambda(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)#5}::_FUN(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:127
+  13: tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::InitVTable()::{lambda(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)#5}::operator()(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*) const
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:127
+  12: tvm::relay::ExprMutator::VisitExpr_(tvm::relay::FunctionNode const*)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:204
+  11: tvm::relay::ExprMutator::Mutate(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:190
+  10: tvm::relay::MixedModeMutator::VisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:102
+  9: ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:509
+  8: ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >(tvm::relay::Expr, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>)::<lambda(const Expr&)> >
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:468
+  7: operator()
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:98
+  6: tvm::relay::MixedModeMutator::VisitLeaf(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:81
+  5: tvm::relay::PatternRewriter::DispatchVisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc:857
+  4: tvm::relay::DFPatternRewrite::MakeCallback() const::{lambda(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*)#1}::operator()(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*) const
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.h:55
+  3: tvm::relay::SimplifyClipAndConsecutiveCast::Callback(tvm::RelayExpr const&, tvm::RelayExpr const&, tvm::runtime::Map<tvm::relay::DFPattern, tvm::runtime::Array<tvm::RelayExpr, void>, void, void> const&) const
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc:221
+  2: tvm::relay::CheckDataTypeMaxMinValue(tvm::runtime::DataType, double, double, int)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc:170
+  1: tvm::min_value(tvm::runtime::DataType const&, tvm::Span)
+        at /home/dimitrije/tvm-quantization/tvm/src/tir/op/op.cc:259
+  0: tvm::IntImm::IntImm(tvm::runtime::DataType, long, tvm::Span)
+        at /home/dimitrije/tvm-quantization/tvm/src/ir/expr.cc:84
+  File "/home/dimitrije/tvm-quantization/tvm/src/ir/expr.cc", line 84
+InternalError: Check failed: (value == 0 || value == 1) is false: ValueError: -1 exceeds range of int1
+Traceback (most recent call last):
+  File "/home/dimitrije/tvm/tvm-quantization-gdrive/diagnostics/probe_int1.py", line 98, in <module>
+    lib = relay.build(modd, target=target, params=params)
+  File "/home/dimitrije/tvm/tvm-quantization/tvm/python/tvm/relay/build_module.py", line 364, in build
+    graph_json, runtime_mod, params = bld_mod.build(
+  File "/home/dimitrije/tvm/tvm-quantization/tvm/python/tvm/relay/build_module.py", line 161, in build
+    self._build(
+  File "/home/dimitrije/tvm/tvm-quantization/tvm/python/tvm/_ffi/_ctypes/packed_func.py", line 239, in __call__
+    raise_last_ffi_error()
+  File "/home/dimitrije/tvm/tvm-quantization/tvm/python/tvm/_ffi/base.py", line 481, in raise_last_ffi_error
+    raise py_err
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc", line 185, in tvm::relay::backend::RelayBuildModule::GetFunction(tvm::runtime::String const&, tvm::runtime::ObjectPtr<tvm::runtime::Object> const&)::{lambda(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*)#3}::operator()(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*) const
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc", line 309, in tvm::relay::backend::RelayBuildModule::Build(tvm::IRModule, tvm::runtime::Array<tvm::Target, void> const&, tvm::Target const&, tvm::relay::Executor const&, tvm::relay::Runtime const&, tvm::WorkspaceMemoryPools const&, tvm::ConstantMemoryPools const&, tvm::runtime::String)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc", line 419, in tvm::relay::backend::RelayBuildModule::BuildRelay(tvm::IRModule, tvm::runtime::String const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc", line 356, in tvm::relay::backend::RelayBuildModule::OptimizeImpl(tvm::IRModule)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/transform.cc", line 133, in tvm::relay::transform::FunctionPassNode::operator()(tvm::IRModule, tvm::transform::PassContext const&) const
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc", line 1145, in unpack_call<tvm::relay::Function, 3, tvm::relay::transform::SimplifyExpr()::<lambda(tvm::relay::Function, tvm::IRModule, tvm::relay::transform::PassContext)> >
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc", line 1124, in tvm::relay::SimplifyExpr(tvm::RelayExpr const&, tvm::IRModule const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc", line 863, in tvm::relay::RewritePatterns(tvm::runtime::Array<tvm::relay::DFPatternCallback, void>, tvm::RelayExpr, tvm::IRModule)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc", line 824, in tvm::relay::PatternRewriter::Rewrite(tvm::runtime::Array<tvm::relay::DFPatternCallback, void> const&, tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 102, in tvm::relay::MixedModeMutator::VisitExpr(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h", line 509, in ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >
+  File "/home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h", line 468, in ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >(tvm::relay::Expr, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>)::<lambda(const Expr&)> >
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 98, in operator()
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 81, in tvm::relay::MixedModeMutator::VisitLeaf(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc", line 844, in tvm::relay::PatternRewriter::DispatchVisitExpr(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 94, in tvm::relay::MixedModeMutator::DispatchVisitExpr(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 158, in tvm::relay::ExprMutator::VisitExpr(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h", line 95, in tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::VisitExpr(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h", line 127, in tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::InitVTable()::{lambda(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)#5}::_FUN(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)
+  File "/home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h", line 127, in tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::InitVTable()::{lambda(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)#5}::operator()(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*) const
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 204, in tvm::relay::ExprMutator::VisitExpr_(tvm::relay::FunctionNode const*)
+  File "/home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h", line 190, in tvm::relay::ExprMutator::Mutate(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 102, in tvm::relay::MixedModeMutator::VisitExpr(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h", line 509, in ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >
+  File "/home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h", line 468, in ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >(tvm::relay::Expr, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>)::<lambda(const Expr&)> >
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 98, in operator()
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc", line 81, in tvm::relay::MixedModeMutator::VisitLeaf(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc", line 857, in tvm::relay::PatternRewriter::DispatchVisitExpr(tvm::RelayExpr const&)
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.h", line 55, in tvm::relay::DFPatternRewrite::MakeCallback() const::{lambda(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*)#1}::operator()(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*) const
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc", line 221, in tvm::relay::SimplifyClipAndConsecutiveCast::Callback(tvm::RelayExpr const&, tvm::RelayExpr const&, tvm::runtime::Map<tvm::relay::DFPattern, tvm::runtime::Array<tvm::RelayExpr, void>, void, void> const&) const
+  File "/home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc", line 170, in tvm::relay::CheckDataTypeMaxMinValue(tvm::runtime::DataType, double, double, int)
+  File "/home/dimitrije/tvm-quantization/tvm/src/tir/op/op.cc", line 259, in tvm::min_value(tvm::runtime::DataType const&, tvm::Span)
+  File "/home/dimitrije/tvm-quantization/tvm/src/ir/expr.cc", line 84, in tvm::IntImm::IntImm(tvm::runtime::DataType, long, tvm::Span)
+tvm.error.InternalError: Traceback (most recent call last):
+  32: tvm::relay::backend::RelayBuildModule::GetFunction(tvm::runtime::String const&, tvm::runtime::ObjectPtr<tvm::runtime::Object> const&)::{lambda(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*)#3}::operator()(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*) const
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc:185
+  31: tvm::relay::backend::RelayBuildModule::Build(tvm::IRModule, tvm::runtime::Array<tvm::Target, void> const&, tvm::Target const&, tvm::relay::Executor const&, tvm::relay::Runtime const&, tvm::WorkspaceMemoryPools const&, tvm::ConstantMemoryPools const&, tvm::runtime::String)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc:309
+  30: tvm::relay::backend::RelayBuildModule::BuildRelay(tvm::IRModule, tvm::runtime::String const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc:419
+  29: tvm::relay::backend::RelayBuildModule::OptimizeImpl(tvm::IRModule)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/backend/build_module.cc:356
+  28: tvm::relay::transform::FunctionPassNode::operator()(tvm::IRModule, tvm::transform::PassContext const&) const
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/transform.cc:133
+  27: unpack_call<tvm::relay::Function, 3, tvm::relay::transform::SimplifyExpr()::<lambda(tvm::relay::Function, tvm::IRModule, tvm::relay::transform::PassContext)> >
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc:1145
+  26: tvm::relay::SimplifyExpr(tvm::RelayExpr const&, tvm::IRModule const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc:1124
+  25: tvm::relay::RewritePatterns(tvm::runtime::Array<tvm::relay::DFPatternCallback, void>, tvm::RelayExpr, tvm::IRModule)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc:863
+  24: tvm::relay::PatternRewriter::Rewrite(tvm::runtime::Array<tvm::relay::DFPatternCallback, void> const&, tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc:824
+  23: tvm::relay::MixedModeMutator::VisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:102
+  22: ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:509
+  21: ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >(tvm::relay::Expr, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>)::<lambda(const Expr&)> >
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:468
+  20: operator()
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:98
+  19: tvm::relay::MixedModeMutator::VisitLeaf(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:81
+  18: tvm::relay::PatternRewriter::DispatchVisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc:844
+  17: tvm::relay::MixedModeMutator::DispatchVisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:94
+  16: tvm::relay::ExprMutator::VisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:158
+  15: tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::VisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:95
+  14: tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::InitVTable()::{lambda(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)#5}::_FUN(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:127
+  13: tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>::InitVTable()::{lambda(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*)#5}::operator()(tvm::runtime::ObjectRef const&, tvm::relay::ExprFunctor<tvm::RelayExpr (tvm::RelayExpr const&)>*) const
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:127
+  12: tvm::relay::ExprMutator::VisitExpr_(tvm::relay::FunctionNode const*)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:204
+  11: tvm::relay::ExprMutator::Mutate(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:190
+  10: tvm::relay::MixedModeMutator::VisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:102
+  9: ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:509
+  8: ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::ExpandDataflow<tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)> >(tvm::relay::Expr, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>, tvm::relay::MixedModeMutator::VisitExpr(const Expr&)::<lambda(const Expr&)>)::<lambda(const Expr&)> >
+        at /home/dimitrije/tvm-quantization/tvm/include/tvm/relay/expr_functor.h:468
+  7: operator()
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:98
+  6: tvm::relay::MixedModeMutator::VisitLeaf(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/expr_functor.cc:81
+  5: tvm::relay::PatternRewriter::DispatchVisitExpr(tvm::RelayExpr const&)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/ir/dataflow_matcher.cc:857
+  4: tvm::relay::DFPatternRewrite::MakeCallback() const::{lambda(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*)#1}::operator()(tvm::runtime::TVMArgs, tvm::runtime::TVMRetValue*) const
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.h:55
+  3: tvm::relay::SimplifyClipAndConsecutiveCast::Callback(tvm::RelayExpr const&, tvm::RelayExpr const&, tvm::runtime::Map<tvm::relay::DFPattern, tvm::runtime::Array<tvm::RelayExpr, void>, void, void> const&) const
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc:221
+  2: tvm::relay::CheckDataTypeMaxMinValue(tvm::runtime::DataType, double, double, int)
+        at /home/dimitrije/tvm-quantization/tvm/src/relay/transforms/simplify_expr.cc:170
+  1: tvm::min_value(tvm::runtime::DataType const&, tvm::Span)
+        at /home/dimitrije/tvm-quantization/tvm/src/tir/op/op.cc:259
+  0: tvm::IntImm::IntImm(tvm::runtime::DataType, long, tvm::Span)
+        at /home/dimitrije/tvm-quantization/tvm/src/ir/expr.cc:84
+  File "/home/dimitrije/tvm-quantization/tvm/src/ir/expr.cc", line 84
+InternalError: Check failed: (value == 0 || value == 1) is false: ValueError: -1 exceeds range of int1
+>>> ATEXIT: Python is shutting down normally <<<

@@ -1,24 +1,28 @@
-## benchmark fp32 vs int8 resnet50 inference on raspberry pi emulated via qemu
-## this script runs inside the qemu guest (aarch64 raspberry pi 3b)
-## models are cross-compiled on host using 03_cross_compile_arm.py
+## benchmark fp32 vs int8 resnet50 inference on aarch64 (Cortex-A72) under QEMU virt
+## this script runs INSIDE the QEMU guest (Ubuntu 22.04 aarch64, see qemu/README.md)
+## models are cross-compiled on host using 03_cross_compile_arm.py and copied via scp
+##
+## the simpler script qemu/run_bench_in_vm.py produces the format that matches
+## logs/qemu_bench.log; this script is a more elaborate alternative with file-size
+## reporting and a top-5 classification dump.
 
 import sys
 import os
 import time
 import numpy as np
 
-# add tvm python path (on the qemu guest filesystem)
-sys.path.insert(0, "/home/pi/tvm/python")
-os.environ["TVM_LIBRARY_PATH"] = "/home/pi/tvm/lib"
+# add tvm python path (inside the guest, after building the runtime per qemu/README.md)
+sys.path.insert(0, "/home/ubuntu/tvm/python")
+os.environ["TVM_LIBRARY_PATH"] = "/home/ubuntu/tvm/build"
 
 import tvm
 from tvm.contrib import graph_executor
 
-MODEL_DIR = "/home/pi/models"
+MODEL_DIR = "/home/ubuntu"
 INPUT_SHAPE = (1, 3, 224, 224)
 NUM_WARMUP = 1
-BENCH_NUMBER = 2
-BENCH_REPEAT = 3
+BENCH_NUMBER = 3
+BENCH_REPEAT = 5
 
 
 def load_and_benchmark(model_prefix, label):

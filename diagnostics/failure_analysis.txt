@@ -5,36 +5,75 @@ Each bitwidth fails at a different stage of the TVM pipeline, which reveals
 that there is no unified validation layer — each pass imposes its own
 dtype-specific assumptions independently.
 
+Note: prior versions of this file documented different failure modes for
+int4 (clean ICHECK in CodeGenLLVM) and int2 (SEGFAULT). Those descriptions
+were observed in an earlier environment; in the current setup
+(libtvm.so built May 6 on WSL-Ubuntu-22.04, Python 3.10.12, glibc 2.35)
+the empirical failure modes for int4 and int2 are different from the
+prior write-up. The descriptions below reflect raw output from the
+current logs/int{1,2,4}_native.log and source verification against the
+TVM tree in tvm-quantization/tvm/.
 
-int4 native — fails at relay.build(), LLVM codegen stage
----------------------------------------------------------
-Location: src/target/llvm/codegen_llvm.cc:1716, CodeGenLLVM::BufferAccessHelper
-Assertion: value_dtype.bits() >= 8 — returns false because 4 < 8
 
-LLVM backend assumes memory access must be at least 1 byte. Sub-byte types
-(int4) would require packing — e.g. 8 int4 values into one int32 — but this
-packing was never implemented in the codegen.
+int4 native — relay.build() does not terminate
+----------------------------------------------
+Symptom: relay.build() runs CPU-bound at ~100% on a single core for
+29+ minutes with no progress, no exception, no assertion. We terminated
+the process externally with SIGTERM (timeout); no clean error site was
+ever reached.
+
+Python stack (sampled every 30 s via faulthandler.dump_traceback_later)
+is stable throughout — Python is parked in a single FFI call:
+  python/tvm/relay/build_module.py:161, BuildModule.build (= self._mod["build"])
+  -> python/tvm/_ffi/_ctypes/packed_func.py:229, __call__
+  -> python/tvm/_ffi/_ctypes/packed_func.py:86, cfun
+The hang is therefore on the C++ side, inside libtvm.so, with no Python
+loop and no progress signal. ps shows ~105% CPU and stable ~1.2 GB RSS,
+so the process is computing, not blocked on I/O.
 
 quantize.quantize() succeeds and produces valid Relay IR with int4 dtypes
-(461 occurrences of "int4" in the IR text), but relay.build() crashes when
-trying to lower that IR to LLVM.
+(461 occurrences of "int4" in the IR text; 53 nn.conv2d, 222 cast,
+122 clip, 82 right_shift, 56 multiply ops post-realize).
+
+Note: the architectural reason sub-byte dtypes cannot pass LLVM codegen is
+the assertion ICHECK_GE(value_dtype.bits(), 8) at
+src/target/llvm/codegen_llvm.cc:1716 (CodeGenLLVM::BufferAccessHelper) —
+that check exists in the source. In this run, the build does not reach
+that check; it stalls in an earlier pass.
 
 
-int2 native — SEGFAULT during quantize.quantize()
---------------------------------------------------
-Location: python/tvm/relay/quantize/quantize.py:329, prerequisite_optimize()
+int2 native — clean InternalError during quantize.quantize()
+------------------------------------------------------------
+Location: src/tir/transforms/arg_binder.cc:277, ArgBinder::BindDLTensor
+          -> include/tvm/runtime/data_type.h:256, GetVectorBytes
 
-This function runs standard Relay optimization passes (SimplifyInference,
-FoldConstant, FoldScaleAxis, CanonicalizeOps) on the fp32 module *before*
-the actual quantization. The int2 dtype is not yet present in the IR at this
-point, but the active qconfig context affects pass behavior through shared state.
+Error:
+  Check failed: data_bits % 8 == 0U (2 vs. 0):
+  Need to load/store by multiple of bytes
 
-Process enters an infinite loop (~97% CPU, stable memory), eventually segfaults.
-Diagnosed using faulthandler with periodic stack dumps every 30 seconds:
-  - Stack consistently shows the hang inside prerequisite_optimize
-  - Final crash is a segfault (signal 11) inside the C++ extension
+Surface: quantize.quantize() itself, during the prerequisite_optimize
+step (python/tvm/relay/quantize/quantize.py:329). That helper
+transparently invokes a downstream build of intermediate IR (via
+Interpreter::TIRToPackedFunc and driver.build) in order to JIT-compile and
+execute small subgraphs for calibration. The int2 storage dtype then flows
+into TIR transforms (MakePackedAPI), where ArgBinder::BindDLTensor calls
+GetVectorBytes(int2) — and GetVectorBytes (data_type.h:252-256) has an
+explicit whitelist for Bool, Int(4), UInt(4), Int(1) (which return 1 byte)
+but NOT Int(2), so the ICHECK_EQ(data_bits % 8, 0U) fires.
 
-Not catchable via try/except — must run in a subprocess.
+The error is a clean InternalError exception, not a segfault. Stack:
+  quantize.quantize
+  -> prerequisite_optimize (quantize.py:329)
+  -> Interpreter::TIRToPackedFunc
+  -> driver.build
+  -> MakePackedAPI (make_packed_api.cc:335)
+  -> ArgBinder::BindDLTensor (arg_binder.cc:277)
+  -> GetVectorBytes (data_type.h:256)
+  -> ICHECK_EQ(data_bits % 8, 0U) failure
+
+Implication: the failure surface for int2 is not the Relay quantization
+pipeline but the TIR-level buffer-binding pass — and TIR's storage model
+assumes byte-multiples, while Relay's quantization does not validate that.
 
 
 int1 native — fails at relay.build(), SimplifyExpr optimization pass
@@ -64,9 +103,9 @@ relay.build() fails with a clean InternalError exception.
 
 Summary table
 -------------
-| Bit width | quantize.quantize() | relay.build() | Failure location                    |
-|-----------|---------------------|---------------|-------------------------------------|
-| int8      | OK                  | OK            | (works)                             |
-| int4      | OK                  | FAIL          | LLVM codegen (bits >= 8)            |
-| int2      | SEGFAULT            | N/A           | prerequisite_optimize (infinite loop)|
-| int1      | OK                  | FAIL          | SimplifyExpr (int1 range check)     |
+| Bit width | quantize.quantize() | relay.build() | Failure location                                                |
+|-----------|---------------------|---------------|-----------------------------------------------------------------|
+| int8      | OK                  | OK            | (works)                                                         |
+| int4      | OK                  | HANG          | non-terminating C++ pass invoked from BuildModule.build         |
+| int2      | FAIL                | N/A           | ArgBinder::BindDLTensor -> GetVectorBytes: data_bits % 8 == 0   |
+| int1      | OK                  | FAIL          | SimplifyExpr: -1 exceeds int1 range (IntImm at expr.cc:84)      |

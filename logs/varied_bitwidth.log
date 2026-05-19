@@ -1,1 +1,22 @@
+
+=== int4_logical (nbit=4, dtype=int8 storage) ===
+[int4_logical] quantize OK
 One or more operators have not been tuned. Please tune your model for better performance. Use DEBUG logging level to see more details.
+[int4_logical] build OK
+int4_logical: Execution time summary:
+ mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)  
+  419.0761     414.4414     459.5166     374.7517     31.7184                  
+
+=== int2_logical (nbit=2, dtype=int8 storage) ===
+[int2_logical] quantize OK
+[int2_logical] build OK
+int2_logical: Execution time summary:
+ mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)  
+  403.7063     402.7199     409.1721     399.2793      3.6939                  
+
+=== int1_logical (nbit=1, dtype=int8 storage) ===
+[int1_logical] quantize OK
+[int1_logical] build OK
+int1_logical: Execution time summary:
+ mean (ms)   median (ms)    max (ms)     min (ms)     std (ms)  
+   9.8077       9.9427      10.0942       9.4605       0.2516                  

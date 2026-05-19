@@ -48,6 +48,7 @@ configs = [
 ]
 
 for label, nbit in configs:
+    print(f"\n=== {label} (nbit={nbit}, dtype=int8 storage) ===", flush=True)
     with quantize.qconfig(
         nbit_input = nbit,
         nbit_weight = nbit,
@@ -61,10 +62,12 @@ for label, nbit in configs:
         skip_conv_layers = [0],
     ):
         modq = quantize.quantize(mod, params = params)
+    print(f"[{label}] quantize OK", flush=True)
 
     with tvm.transform.PassContext(opt_level = 3):
         libq = relay.build(modq, target = target, params = params)
+    print(f"[{label}] build OK", flush=True)
 
     m = graph_executor.GraphModule(libq["default"](dev))
     m.set_input(input_name, tvm.nd.array(img.astype("float32")))
-    print(f"{label}:", m.benchmark(dev, number=100))
+    print(f"{label}:", m.benchmark(dev, number=100), flush=True)

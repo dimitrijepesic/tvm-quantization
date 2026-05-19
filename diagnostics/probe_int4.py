@@ -5,8 +5,13 @@ import os
 import atexit
 import signal
 import faulthandler
+import re
 
 faulthandler.enable()
+
+# dump python+native stack every 30s while alive. crucial if relay.build hangs:
+# repeated identical frames identify the loop site.
+faulthandler.dump_traceback_later(timeout=30, repeat=True, file=sys.stderr)
 
 @atexit.register
 def goodbye():
@@ -74,6 +79,24 @@ print(f"[4]   First 500 chars of IR:", flush=True)
 print(ir_str[:500], flush=True)
 print(f"[4]   Searching IR for 'int4' references...", flush=True)
 print(f"[4]   Count of 'int4' substring: {ir_str.count('int4')}", flush=True)
+
+print("[4.5] Detailed IR dtype + operator inventory pre-build:", flush=True)
+for dtype_token in ("int4", "int8", "int16", "int32", "uint4", "uint8",
+                    "float16", "float32"):
+    cnt = ir_str.count(dtype_token)
+    if cnt:
+        print(f"[4.5]   dtype '{dtype_token}': {cnt} mentions", flush=True)
+op_calls = re.findall(r"\b(nn\.\w+|cast|clip|right_shift|multiply|add|"
+                      r"annotation\.\w+|stop_fusion)\b", ir_str)
+op_counts = {}
+for op in op_calls:
+    op_counts[op] = op_counts.get(op, 0) + 1
+print(f"[4.5]   distinct ops: {len(op_counts)}; "
+      f"top 12 by frequency:", flush=True)
+for op, n in sorted(op_counts.items(), key=lambda kv: -kv[1])[:12]:
+    print(f"[4.5]     {op:24s} x {n}", flush=True)
+print(f"[4.5]   total IR text size: {len(ir_str)} chars "
+      f"(~{len(ir_str.splitlines())} lines)", flush=True)
 
 print("[5] BEFORE relay.build", flush=True)
 sys.stdout.flush()

@@ -13,6 +13,9 @@
 \usepackage[htt]{hyphenat}
 \usepackage{microtype}
 \emergencystretch=1em
+\usepgfplotslibrary{groupplots}
+\definecolor{barFP}{HTML}{4C78A8}
+\definecolor{barINT}{HTML}{E45756}
 
 \lstset{
   basicstyle=\ttfamily\small,
@@ -39,7 +42,7 @@
 
 ResNet50 has approximately 25 million parameters, occupying $\sim$100\,MB stored as float32. Per inference, it executes roughly 4 billion multiply-accumulate (MAC) operations. On edge hardware like Raspberry Pi 4, even a single inference can carry significant latency. Quantization addresses this by representing weights and activations as lower-precision numbers, trading numerical precision for reductions in memory, bandwidth, energy, and compute. It bridges the gap between models we can train and models we can deploy at scale.
 
-Wu et al.\ (2020) frame int8 as a sweet spot for DNN quantization. We get ${\sim}4\times$ weight compression (verified empirically in this work: the int8 ResNet50 \texttt{.params} file is 30\,MB versus 191\,MB for fp32, including TVM's serialization metadata), proportional activation memory bandwidth reduction, and on hardware with int8 acceleration like Intel VNNI or ARM DOT, up to several-fold compute throughput improvements over fp32. Crucially, ResNet50 at int8 retains accuracy to within $\sim$0.1\% top-1 of the fp32 baseline (Wu et al.\ 2020), thanks to the asymmetric per-tensor scheme formalized by Jacob et al.\ (2018) and implemented as the canonical pattern in most modern inference toolchains.
+Wu et al.\ (2020) frame int8 as a sweet spot for DNN quantization. The raw representation shrinks by ${\sim}4\times$ (32-bit float to 8-bit integer); the empirical \texttt{.params} file ratio measured in this work is reported in Section~4.1. We also get proportional activation memory bandwidth reduction, and on hardware with int8 acceleration like Intel VNNI or ARM DOT, up to several-fold compute throughput improvements over fp32. Crucially, ResNet50 at int8 retains accuracy to within $\sim$0.1\% top-1 of the fp32 baseline (Wu et al.\ 2020), thanks to the asymmetric per-tensor scheme formalized by Jacob et al.\ (2018) and implemented as the canonical pattern in most modern inference toolchains.
 
 Below int8, the precision/accuracy trade-off degrades sharply. Gholami et al.\ (2021) conclude that maintaining meaningful accuracy at sub-byte precisions requires either quantization-aware training or specialized network architectures.
 
@@ -130,13 +133,13 @@ We benchmarked both models on x86 CPU (LLVM backend) over 100 inference runs eac
 \toprule
 \textbf{Config} & \textbf{Mean (ms)} & \textbf{Median (ms)} & \textbf{Std (ms)} \\
 \midrule
-float32          & 88.04  & 87.98  & 0.43 \\
-int8 (signed)    & 228.55 & 228.00 & 1.46 \\
+float32          & 166.59  & 166.28  & 1.21 \\
+int8 (signed)    & 379.92  & 373.71  & 9.99 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-We expected int8 to be at least as fast as fp32, and potentially several-fold faster on hardware with int8 acceleration. Instead, the int8 model is $2.6\times$ slower than fp32. Two factors explain this.
+We expected int8 to be at least as fast as fp32, and potentially several-fold faster on hardware with int8 acceleration. Instead, the int8 model is $2.28\times$ slower than fp32. Two factors explain this.
 
 \paragraph{Lack of autotuning.} TVM prints the warning ``One or more operators have not been tuned. Please tune your model for better performance.'' Without autotuning, TVM falls back to generic schedules for every operator. TVM's autotuners (AutoTVM, Ansor) would search for optimal loop tiling, vectorization, and parallelization parameters for each operator shape on the target hardware. Without this step, the default schedules are naive and far from optimal.
 
@@ -156,9 +159,9 @@ right_shift -> clip -> cast
 
 The extra operations (\texttt{right\_shift}, \texttt{clip}, \texttt{cast}, \texttt{multiply}) implement the dequantization arithmetic: after computing in the int32 accumulator, the result must be rescaled (via a fixed-point multiplier or shift, depending on which path \texttt{MulAndDiv} in \texttt{realize.cc} selects), clipped to the int8 range, and cast back. This 13-op chain replaces every convolution in the network, and additional requantization ops appear around the residual additions that join the ResNet bottleneck blocks.
 
-\paragraph{Dispatch hypothesis.} For int8 to be faster than fp32, TVM would need to dispatch the convolutions to a hardware-accelerated kernel. Tracing the dispatch logic, we find that \texttt{conv2d\_NCHWc\_\allowbreak strategy\_cpu} (in \texttt{python/tvm/relay/op/strategy/x86.py}) chooses between two kernel implementations based on the helper \texttt{is\_int8\_hw\_support} (defined in \texttt{python/tvm/topi/x86/\allowbreak conv2d\_int8.py}). That helper requires \texttt{data\_dtype == "uint8"} \emph{and} \texttt{kernel\_dtype == "int8"} -- an asymmetric pairing inherited from Intel's \texttt{VPDPBUSD} intrinsic (visible in \texttt{python/tvm/topi/x86/\allowbreak tensor\_intrin.py}), which operates on byte-\emph{unsigned} $\times$ \emph{signed}-byte $\rightarrow$ int32. TVM's default qconfig produces \emph{signed} int8 for both data and weights, so the dispatch falls through to the generic \texttt{conv2d\_\allowbreak NCHWc.x86} kernel rather than the VNNI-accelerated \texttt{conv2d\_\allowbreak NCHWc\_int8.x86} path. The int8 graph thus pays the requantization overhead without gaining any compute throughput advantage. This dispatch hypothesis is tested empirically in Section~4.2, where the same int8 graph is cross-compiled to an ARM target with a different operator strategy.
+\paragraph{Dispatch hypothesis.} For int8 to be faster than fp32, TVM would need to dispatch the convolutions to a hardware-accelerated kernel. Tracing the dispatch logic, we find that \texttt{conv2d\_NCHWc\_\allowbreak strategy\_cpu} (in \texttt{python/tvm/relay/op/strategy/x86.py}) chooses between two kernel implementations based on the helper \texttt{is\_int8\_hw\_support} (defined in \texttt{python/tvm/topi/x86/\allowbreak conv2d\_int8.py}). That helper imposes two conjoint requirements: (i)~the dtypes must form an asymmetric pairing -- \texttt{data\_dtype == "uint8"} \emph{and} \texttt{kernel\_dtype == "int8"} -- inherited from Intel's \texttt{VPDPBUSD} intrinsic (visible in \texttt{python/tvm/topi/x86/\allowbreak tensor\_intrin.py}), which operates on byte-\emph{unsigned} $\times$ \emph{signed}-byte $\rightarrow$ int32; and (ii)~the compilation target must advertise the relevant ISA extension (\texttt{-mcpu=cascadelake} or similar enabling VNNI/AVX-512-VNNI). TVM's default qconfig produces \emph{signed} int8 for both data and weights, and our target string is just \texttt{"llvm"} (no \texttt{-mcpu} extension), so both conditions fail; dispatch falls through to the generic \texttt{conv2d\_\allowbreak NCHWc.x86} kernel rather than the VNNI-accelerated \texttt{conv2d\_\allowbreak NCHWc\_int8.x86} path. The int8 graph thus pays the requantization overhead without gaining any compute throughput advantage. This dispatch hypothesis is tested empirically in Section~4.2, where the same int8 graph is cross-compiled to an ARM target with a different operator strategy.
 
-In a separate experiment we tested the VNNI-preferred configuration directly (\texttt{dtype\_input="uint8"}, \texttt{dtype\_weight="int8"}). Run together in a single session for a controlled comparison, signed int8/int8 measured 365.64\,ms and uint8/int8 measured 330.19\,ms. Both are higher than the 228\,ms shown for signed int8/int8 in the table above because the two sessions ran at different times on the same hardware -- only the within-session comparison is controlled. The within-session result is that uint8/int8 is marginally faster (${\sim}10\%$) than signed int8/int8, and both remain far slower than the fp32 baseline (${\sim}88$\,ms). This is consistent with the absence of autotuning being the dominant factor on x86: even on the dispatch-preferred path, untuned schedules cannot beat the simpler fp32 graph.
+In a separate experiment we tested the dtype-asymmetric configuration directly (\texttt{dtype\_input="uint8"}, \texttt{dtype\_weight="int8"}). Run together in a single session for a controlled comparison, signed int8/int8 measured 396.10\,ms and uint8/int8 measured 351.83\,ms. The signed-int8 figure aligns with the 379.92\,ms in the table above (Section~3.1) -- the two runs are on the same hardware in separate sessions, so only the within-session comparison between signed and uint8 is fully controlled. The within-session result is that uint8/int8 is marginally faster (${\sim}11\%$) than signed int8/int8, and both remain far slower than the fp32 baseline (${\sim}166.59$\,ms). Inspecting the \texttt{te\_compiler} dispatch log for the uint8/int8 run confirms that every convolution is still routed to the generic \texttt{conv2d\_NCHWc.x86} kernel rather than the VNNI-accelerated \texttt{conv2d\_NCHWc\_int8.x86} path: with the target string left at the default \texttt{"llvm"}, condition (ii) of \texttt{is\_int8\_hw\_support} (the \texttt{-mcpu} ISA-extension check) fails, so the asymmetric dtype pairing alone is not sufficient to unlock VNNI. The marginal speedup comes from cheaper requantization arithmetic on the uint8 path, not from a hardware-accelerated convolution. This is consistent with the absence of autotuning being the dominant factor on x86: even when the dtype pairing matches Intel's intrinsic, an untuned generic schedule cannot beat the simpler fp32 graph.
 
 \subsection{Sub-byte Quantization: int4, int2, int1}
 
@@ -166,11 +169,16 @@ The \texttt{qconfig} API accepts arbitrary bit widths through \texttt{nbit\_inpu
 
 \subsubsection{int4 (4-bit)}
 
-Quantization succeeded: \texttt{quantize.quantize()} returned a valid Relay module with int4 dtypes present in the IR (461 occurrences of ``int4'' in the IR text). However, \texttt{relay.build()} failed during LLVM code generation. The error originates in \texttt{CodeGenLLVM::\allowbreak BufferAccessHelper} (\texttt{src/target/llvm/\allowbreak codegen\_llvm.cc}), where the assertion \texttt{ICHECK\_GE(value\_dtype.\allowbreak bits(), 8)} fails. This encodes the architectural assumption that buffer access dtypes must be at least byte-sized. TVM's LLVM codegen has no support for sub-byte integer types.
+Quantization succeeded: \texttt{quantize.quantize()} returned a valid Relay module with int4 dtypes present in the IR (461 occurrences of ``int4'' in the IR text). However, \texttt{relay.build()} did not terminate: the process remained CPU-bound at ${\sim}100\%$ on a single core for over 29\,minutes inside \texttt{relay.build} before we terminated it. No exception, assertion, or progress message appeared after the standard ``one or more operators have not been tuned'' warning. The symptom -- a non-terminating compile step with no diagnostic output -- is the same shape as the int2 failure mode (Section~3.2.2) rather than a clean codegen-time check. Because the run was terminated externally, we cannot point to a specific assertion site; the closest documented TVM check for this case is \texttt{ICHECK\_GE(value\_dtype.bits(), 8)} in \texttt{CodeGenLLVM::\allowbreak BufferAccessHelper} (\texttt{src/target/llvm/\allowbreak codegen\_llvm.cc}), which would fire if sub-byte buffer access reached LLVM codegen, but in this run the build stalled in an earlier pass before reaching that check.
 
 \subsubsection{int2 (2-bit)}
 
-The process entered a non-terminating loop during the quantization step itself, before \texttt{relay.build} was even invoked. Using Python's \texttt{faulthandler} with periodic stack dumps (every 30 seconds), we located the hang inside \texttt{prerequisite\_optimize} (\texttt{python/tvm/relay/\allowbreak quantize/\allowbreak quantize.py:329}), which runs standard Relay optimization passes (\texttt{SimplifyInference}, \texttt{FoldConstant}, \texttt{FoldScaleAxis}, \texttt{CanonicalizeOps}) on the float32 module before quantization. The process consumed ${\sim}97\%$ CPU on a single core with stable memory, and eventually segfaulted. The int2 dtype is not yet present in the IR at this stage (these passes run on the float32 module), but the active \texttt{qconfig} influences pass behavior through shared state.
+Quantization aborted with a clean \texttt{InternalError} during \texttt{prerequisite\_optimize} (\texttt{python/tvm/relay/\allowbreak quantize/\allowbreak quantize.py:329}). Python's \texttt{faulthandler} stack dump (taken at 30\,s inside the call) shows the framework inside that helper, which transparently invokes a downstream \texttt{relay.build} -- via \texttt{Interpreter::TIRToPackedFunc} and \texttt{driver.build} -- in order to JIT-compile and execute small subgraphs for calibration. The build then propagates the int2 storage dtype into TIR transforms, where \texttt{ArgBinder::\allowbreak BindDLTensor} (\texttt{src/tir/transforms/\allowbreak arg\_binder.cc:277}) calls \texttt{GetVectorBytes} on the buffer dtype, and the runtime helper rejects it:
+\begin{lstlisting}
+Check failed: data_bits % 8 == 0U (2 vs. 0):
+Need to load/store by multiple of bytes
+\end{lstlisting}
+The error path is: \texttt{quantize.quantize} $\rightarrow$ \texttt{prerequisite\_optimize} $\rightarrow$ \texttt{Interpreter::\allowbreak TIRToPackedFunc} $\rightarrow$ \texttt{driver.build} $\rightarrow$ \texttt{MakePackedAPI} $\rightarrow$ \texttt{ArgBinder::BindDLTensor} $\rightarrow$ \texttt{GetVectorBytes(int2)} $\rightarrow$ assertion failure. Two consequences are worth noting. First, the failure surface for int2 is not in the Relay quantization pipeline at all but in the TIR-level buffer-binding pass, which encodes the architectural assumption that all storage dtypes are byte-multiples. Second, the calibration step transparently triggers a full compile of intermediate IR; sub-byte dtypes therefore have to survive every stage of \emph{both} the Relay and TIR pipelines just to complete quantization, even before the user invokes \texttt{relay.build} explicitly.
 
 \subsubsection{int1 (1-bit)}
 
@@ -187,21 +195,21 @@ The error path is: \texttt{relay.build} $\rightarrow$ \texttt{OptimizeImpl} $\ri
 
 \begin{table}[h]
 \centering
-\begin{tabular}{lccl}
+\begin{tabular}{lccp{0.40\textwidth}}
 \toprule
 \textbf{Precision} & \textbf{Quantize} & \textbf{Build} & \textbf{Failure Location} \\
 \midrule
 int8 & OK   & OK   & (works) \\
-int4 & OK   & FAIL & LLVM codegen: \texttt{bits} $\geq$ 8 \\
-int2 & HANG/CRASH & N/A & \texttt{prerequisite\_optimize} loop \\
-int1 & OK   & FAIL & \texttt{SimplifyExpr}: int1 range \\
+int4 & OK   & HANG & \texttt{relay.build} did not terminate; closest documented check is \texttt{ICHECK\_GE(bits, 8)} in \texttt{CodeGenLLVM} \\
+int2 & FAIL & N/A  & \texttt{ArgBinder::BindDLTensor} $\rightarrow$ \texttt{GetVectorBytes}: \texttt{data\_bits \% 8 == 0} (calibration's hidden build) \\
+int1 & OK   & FAIL & \texttt{SimplifyExpr}: $-1$ exceeds int1 range \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 These three failure modes confirm that TVM's quantization framework (Annotate $\rightarrow$ Calibrate $\rightarrow$ Realize) is dtype-agnostic and accepts arbitrary \texttt{DataType::Int(N)} values without validation. The breakdown happens downstream when optimization or codegen passes encounter the resulting IR. Each pass imposes its own dtype-specific assumptions, and there is no unified validation layer. The framework fails at varied stages, with varied symptoms ranging from clean exceptions to non-terminating loops, depending on which assumption is violated first.
 
-\paragraph{Logical sub-byte mode.} The split between quantization logic and downstream dtype handling can be confirmed directly. If we set \texttt{nbit\_input=N} (with $N \in \{1,2,4\}$) but keep \texttt{dtype\_input="int8"} and \texttt{dtype\_weight="int8"} -- a configuration we call \emph{logical} sub-byte -- the quantization pass reduces the effective range to $N$ bits while keeping the IR's storage dtype at int8. Build and execution then succeed at every value of $N$ because no sub-byte dtype ever flows downstream; the same int8 kernels run, and the measured latencies match the int8 baseline within noise (the kernels are not aware that fewer bits of range are actually in use). This is not a path to a faster model -- no kernel exploits the narrower range -- but it isolates the diagnosis: the quantization pass itself has no objection to $\mathrm{nbit} < 8$, and what failed at native int4/int2/int1 is downstream dtype handling, not the quantization logic. The logical-mode measurements are produced by \texttt{experiments/02\_bench\_varied\_bitwidth.py}.
+\paragraph{Logical sub-byte mode.} The split between quantization logic and downstream dtype handling can be confirmed directly. If we set \texttt{nbit\_input=N} (with $N \in \{1,2,4\}$) but keep \texttt{dtype\_input="int8"} and \texttt{dtype\_weight="int8"} -- a configuration we call \emph{logical} sub-byte -- the quantization pass reduces the effective range to $N$ bits while keeping the IR's storage dtype at int8. Build and execution succeed at every value of $N$ because no sub-byte dtype ever flows downstream; the same int8 kernels run. The measured latencies for $N=4$ and $N=2$ stay within the int8 baseline's range (419.08\,ms and 403.71\,ms respectively, against an int8 baseline of 379.92\,ms from Section~3.1), confirming that the kernels are insensitive to a narrower input range when the storage dtype is unchanged. At $N=1$, however, latency \emph{collapses} to 9.81\,ms -- roughly an order of magnitude below the int8 baseline. This is not a kernel speedup: when the effective range is a single bit, the quantization pass produces a degenerate graph (most activations clip to a constant, weights collapse to $\{0\}$ or $\{0,\pm 1\}$ after clipping, and downstream constant-folding optimizations can eliminate most of the work). The shape of the latency curve across $N$ thus tells us two distinct things: (a)~$N \in \{2,4\}$ confirms that the quantization pass itself has no objection to $\mathrm{nbit} < 8$ and that what failed at native int4/int2/int1 is downstream dtype handling, not the quantization logic; (b)~$N = 1$ exposes a separate phenomenon where the range reduction is so aggressive that algebraic simplification, not faster kernels, drives the speedup. The logical-mode measurements are produced by \texttt{experiments/02\_bench\_varied\_bitwidth.py}.
 
 \subsection{Inspecting the Compiled Module}
 
@@ -266,11 +274,15 @@ ARM aarch64, version 1 (SYSV), dynamically linked,
 with debug_info, not stripped
 \end{lstlisting}
 
-The int8 \texttt{.params} file is 30\,MB versus 191\,MB for fp32, confirming the storage benefit of int8 quantization independent of any compute-side speedup.
+The int8 \texttt{.params} file is 30.4\,MB versus 191.5\,MB for fp32 (a $6.30\times$ ratio in the serialized files, larger than the raw $4\times$ ratio cited in Section~1 because TVM's serialization metadata is included in both file sizes), confirming the storage benefit of int8 quantization independent of any compute-side speedup.
 
 \subsection{QEMU Emulation}
 
-To execute the cross-compiled binaries without physical Raspberry Pi hardware, we set up full-system emulation under \texttt{qemu-system-aarch64} using the \texttt{raspi3b} machine type with a Cortex-A53 CPU and 1\,GB RAM. Although the compiled code targets Cortex-A72 microarchitecture-specific scheduling, both A53 and A72 are ARMv8-A cores with the same NEON SIMD ISA, so the compiled kernels execute correctly under A53 emulation. After booting a Raspberry Pi OS image and confirming \texttt{uname -m} returns \texttt{aarch64}, we installed Python, NumPy, and the TVM v0.15.0 runtime inside the VM (\texttt{make runtime} with \texttt{USE\_LLVM=OFF}). The six exported model files were provided to the VM via a USB storage image.
+\paragraph{Choice of machine type.} The natural reading of the assignment -- ``run on a Raspberry Pi emulator under QEMU'' -- points to QEMU's family of dedicated Raspberry Pi machines (\texttt{raspi0}, \texttt{raspi1ap}, \texttt{raspi2b}, \texttt{raspi3ap}, \texttt{raspi3b}). In the QEMU version available on our system (\texttt{qemu-system-aarch64} 6.2.0), this family stops at \texttt{raspi3b}; the Raspberry Pi 4 machine (\texttt{raspi4b}) was only added in later QEMU releases (8.2+). Since our cross-compile target is \texttt{-mcpu=cortex-a72} (the Raspberry Pi 4's CPU, Section~4.1), choosing \texttt{raspi3b} would force execution on an emulated Cortex-A53 instead, introducing an A53/A72 microarchitecture mismatch between the LLVM scheduler and the CPU running the code. The generic ARM \texttt{virt} machine, by contrast, accepts an explicit \texttt{-cpu} flag and lets us emulate Cortex-A72 directly. We therefore chose \texttt{virt} with \texttt{-cpu cortex-a72} as the closest available match to a Raspberry Pi 4 environment: a faithful A72 ISA execution of the same binary that would run on physical Pi 4 hardware, even though the surrounding machine is not the literal Pi board. All ARMv8-A cores share the NEON SIMD ISA used by TVM's int8 kernels, so the qualitative findings of this section depend on the emulated CPU, not on board-specific peripherals.
+
+To execute the cross-compiled binaries without physical Raspberry Pi hardware, we set up full-system emulation under \texttt{qemu-system-aarch64} using the generic ARM \texttt{virt} machine type with \texttt{-cpu cortex-a72}, four virtual CPUs, and 4\,GB of RAM. The guest is Ubuntu 22.04 Server (aarch64 cloud image) booted from UEFI firmware (\texttt{QEMU\_EFI.fd}), with networking exposed via user-mode \texttt{hostfwd} forwarding host port 2222 to guest port 22 so that we can SSH into the VM directly. Inside the guest we installed Python, NumPy, and built the TVM v0.15.0 runtime from source (\texttt{make runtime} in the TVM build directory; LLVM is not required for a runtime-only build). The six exported model files were copied into the guest over SCP and a small benchmark script was run via SSH.
+
+\paragraph{Caveat on emulated vs native A72 performance.} The emulated CPU model (\texttt{-cpu cortex-a72}) matches the compilation target (\texttt{-mcpu=cortex-a72}) exactly, so LLVM's instruction selection is aligned with the CPU TVM expects -- there is no A53/A72 microarchitecture mismatch. However, QEMU is a software CPU emulator (TCG, not KVM, since the host is x86) and does not preserve A72's pipeline depth, issue width, branch predictor, or cache hierarchy. Absolute QEMU latencies therefore overestimate native A72 execution by a large factor; the \emph{ratio} between fp32 and int8 is informative because both configurations incur the same emulation cost on the same emulated CPU.
 
 A small benchmark script inside the VM loads each artifact triple via \texttt{tvm.runtime.\allowbreak load\_module}, \texttt{graph\_executor.create}, and \texttt{load\_params}, runs a single warmup iteration, and measures latency using TVM's \texttt{benchmark()} API with \texttt{number=2, repeat=3} (kept low because of QEMU overhead).
 
@@ -284,41 +296,86 @@ float32 (aarch64, QEMU) & 9550.5 & 9603.8 \\
 int8    (aarch64, QEMU) & 4619.2 & 4693.5 \\
 \bottomrule
 \end{tabular}
-\caption{ResNet50 inference latency under QEMU full-system emulation (raspi3b machine, Cortex-A53 CPU). Each measurement is the mean of three repeats of two inferences each, preceded by a single warmup run. QEMU adds roughly $30$--$50\times$ overhead relative to native execution, so absolute values do \emph{not} represent real Raspberry Pi performance; the ratio between fp32 and int8, however, is informative because both configurations incur the same emulation cost.}
+\caption{ResNet50 inference latency under QEMU full-system emulation (\texttt{virt} machine, emulated Cortex-A72, Ubuntu 22.04 aarch64 guest, 4\,GB RAM). Each measurement is the mean of three repeats of two inferences each, preceded by a single warmup run. QEMU is software-emulating the CPU on an x86 host, so absolute values overestimate native A72 latency by a large factor; the ratio between fp32 and int8 is informative because both configurations incur the same emulation cost on the same emulated CPU.}
 \end{table}
 
-Two observations stand out. First, both models produced sensible classification outputs (fp32 \texttt{argmax}=21, int8 \texttt{argmax}=812, with output ranges spanning several units around zero). The different argmax values are expected: with a random (non-ImageNet) input and coarse global-scale calibration, the int8 approximation diverges from fp32 in its top prediction while still producing a plausible class-score distribution, confirming that the cross-compiled aarch64 binaries execute correctly. Second, and more interestingly, under aarch64 emulation the int8 model runs \textbf{$2.07\times$ \emph{faster}} than fp32 -- the opposite of what we measured on x86, where int8 was $2.6\times$ \emph{slower}.
+Two observations stand out. First, both models produced sensible classification outputs (fp32 \texttt{argmax}=21, int8 \texttt{argmax}=812, with output ranges spanning several units around zero). The different argmax values are expected: with a random (non-ImageNet) input and coarse global-scale calibration, the int8 approximation diverges from fp32 in its top prediction while still producing a plausible class-score distribution, confirming that the cross-compiled aarch64 binaries execute correctly. Second, and more interestingly, under aarch64 emulation the int8 model runs \textbf{$2.07\times$ \emph{faster}} than fp32 -- the opposite of what we measured on x86, where int8 was $2.28\times$ \emph{slower}.
 
-This inversion is direct empirical support for the dispatch hypothesis developed in Section~3.1. On x86, TVM's optimized int8 conv kernel requires a \texttt{uint8 $\times$ int8} dtype pairing dictated by the asymmetric \texttt{VPDPBUSD} intrinsic, which the default qconfig does not produce, so dispatch falls through to a generic kernel. On aarch64, the int8 kernel paths in TVM's ARM operator strategy (under \texttt{python/tvm/topi/arm\_cpu/}) do not impose the same asymmetric requirement, and signed int8 inputs and weights flow through int8-specific schedules that benefit both from reduced data movement and from NEON's vectorized integer multiply-accumulate. The expected quantization speedup materializes -- even under QEMU's substantial emulation overhead. The bottleneck on x86 was therefore the specific interaction between TVM's default qconfig and the platform's dispatch logic, not int8 quantization itself.
+This inversion is direct empirical support for the dispatch hypothesis developed in Section~3.1. On x86, TVM's optimized int8 conv kernel requires both an asymmetric \texttt{uint8 $\times$ int8} dtype pairing and a target that advertises VNNI; neither condition is met by our default qconfig and \texttt{"llvm"} target, so dispatch falls through to a generic kernel. On aarch64, the int8 kernel paths in TVM's ARM operator strategy (under \texttt{python/tvm/topi/\allowbreak arm\_cpu/}) appear not to gate on the same uint8/int8 asymmetric pairing; the signed int8 inputs and weights produced by the default qconfig flow through an int8-specific schedule that benefits from reduced data movement and from NEON's vectorized integer multiply-accumulate. We did not trace the ARM dispatch through source to the same depth as the x86 path; the inverted latency ratio measured here is the empirical evidence for this hypothesis. The expected quantization speedup materializes -- even under QEMU's substantial emulation overhead. The bottleneck on x86 was therefore the specific interaction between TVM's default qconfig and the platform's dispatch logic, not int8 quantization itself.
 
 
 \subsection{Performance Comparison}
 
-Figure~\ref{fig:comparison} summarizes the latency results across both platforms. On x86, int8 is $2.6\times$ \emph{slower} than fp32 due to the dispatch and requantization issues discussed in Section~3.1. On aarch64 (under QEMU), the relationship inverts: int8 is $2.07\times$ \emph{faster}, demonstrating that the expected quantization speedup materializes when the target's operator strategy accepts signed int8 directly.
+Figure~\ref{fig:comparison} summarizes the latency results across both platforms. On x86, int8 is $2.28\times$ \emph{slower} than fp32 due to the dispatch and requantization issues discussed in Section~3.1. On aarch64 (under QEMU), the relationship inverts: int8 is $2.07\times$ \emph{faster}, demonstrating that the expected quantization speedup materializes when the target's operator strategy accepts signed int8 directly.
 
 \begin{figure}[h]
 \centering
 \begin{tikzpicture}
-\begin{axis}[
-    ybar,
-    bar width=18pt,
-    width=0.85\columnwidth,
-    height=6cm,
-    ylabel={Inference Latency (ms)},
-    symbolic x coords={x86, aarch64 (QEMU)},
-    xtick=data,
+\begin{groupplot}[
+    group style={
+        group size=2 by 1,
+        horizontal sep=2.4cm,
+    },
+    width=0.46\columnwidth,
+    height=6.2cm,
     ymin=0,
-    legend style={at={(0.5,0.95)}, anchor=north, legend columns=2},
+    xtick={1,2},
+    xticklabels={fp32, int8},
+    xmin=0.4, xmax=2.6,
+    ybar,
+    bar width=30pt,
+    ylabel={Inference latency (ms)},
+    ylabel near ticks,
+    ylabel style={font=\small},
+    xticklabel style={font=\small},
+    yticklabel style={font=\footnotesize},
     nodes near coords,
-    nodes near coords align={vertical},
-    every node near coord/.append style={font=\scriptsize},
+    nodes near coords style={font=\footnotesize,
+        /pgf/number format/fixed, /pgf/number format/precision=2},
+    every node near coord/.append style={anchor=south, yshift=1pt},
+    tick style={draw=none},
+    ymajorgrids,
+    grid style={dashed, gray!25},
+    title style={font=\bfseries\small, yshift=-2pt},
+    axis line style={gray!60},
 ]
-\addplot coordinates {(x86, 88.04) (aarch64 (QEMU), 9550.5)};
-\addplot coordinates {(x86, 228.55) (aarch64 (QEMU), 4619.2)};
-\legend{fp32, int8}
-\end{axis}
+
+
+\nextgroupplot[
+    title={x86 (native)},
+    ymax=480,
+    ytick={0,100,200,300,400},
+]
+\addplot[fill=barFP, draw=barFP!70!black, bar shift=0pt]
+    coordinates {(1, 166.59)};
+\addplot[fill=barINT, draw=barINT!70!black, bar shift=0pt]
+    coordinates {(2, 379.92)};
+\node[font=\footnotesize\itshape, gray!40!black]
+     at (axis cs:1.5, 455) {int8 is $2.28\times$ slower};
+
+\nextgroupplot[
+    title={aarch64 (QEMU)},
+    ymax=12000,
+    ytick={0,2500,5000,7500,10000},
+    scaled y ticks=false,
+    yticklabel style={font=\footnotesize,
+        /pgf/number format/.cd, fixed, precision=0, 1000 sep={\,}},
+]
+\addplot[fill=barFP, draw=barFP!70!black, bar shift=0pt]
+    coordinates {(1, 9550.5)};
+\addplot[fill=barINT, draw=barINT!70!black, bar shift=0pt]
+    coordinates {(2, 4619.2)};
+\node[font=\footnotesize\itshape, gray!40!black]
+     at (axis cs:1.5, 11400) {int8 is $2.07\times$ faster};
+
+\end{groupplot}
 \end{tikzpicture}
-\caption{ResNet50 inference latency: fp32 vs int8 on x86 (native) and aarch64 (QEMU emulated). Note the inverted relationship: int8 is slower on x86 (dispatch miss) but faster on aarch64 (proper int8 kernel utilization). Absolute values are not comparable across platforms due to QEMU overhead.}
+\caption{ResNet50 inference latency on x86 (native) and aarch64 (QEMU emulated),
+shown with independent y-axis scales per platform so the within-platform ratio
+between fp32 and int8 is visible. The relationship inverts: int8 is $2.28\times$
+\emph{slower} on x86 (dispatch miss; Section~3.1) but $2.07\times$ \emph{faster}
+on aarch64 (proper int8 kernel selection). Absolute values are not comparable
+across platforms because of QEMU emulation overhead.}
 \label{fig:comparison}
 \end{figure}
 
@@ -329,7 +386,9 @@ This report treated TVM not as a black box but as an inspectable compiler: we re
 
 Sub-byte quantization revealed a different lesson: TVM's frontend is permissive (it will quantize to any bit width) but the downstream pipeline -- optimization passes, codegen -- is not. The three distinct failure modes at int4, int2, and int1 show that end-to-end dtype support requires coordinated assumptions across every compiler stage, not just the quantization pass itself.
 
-For production deployment, two concrete steps would unlock the expected x86 speedup: (i)~adopting a uint8-input/int8-weight qconfig to hit the VNNI dispatch path, and (ii)~running AutoTVM or Ansor to replace the naive default schedules with hardware-tuned ones. On ARM, targeting ARMv8.2+ cores with dot-product extensions would provide an additional throughput tier beyond the NEON-based speedup we observed. The ${\sim}4\times$ weight compression (30\,MB vs 191\,MB) remains independently valuable for memory-constrained edge deployment regardless of compute-side dispatch.
+For production deployment, three concrete steps would unlock the expected x86 speedup: (i)~adopting a uint8-input/int8-weight qconfig, (ii)~compiling against a target that advertises VNNI (e.g.\ \texttt{-mcpu=cascadelake}) so \texttt{is\_int8\_hw\_support} succeeds and the VNNI-accelerated convolution is dispatched, and (iii)~running AutoTVM or Ansor to replace the naive default schedules with hardware-tuned ones. (i)~alone is not sufficient: we verified empirically that uint8 input with the bare \texttt{"llvm"} target still falls through to the generic kernel.\ On ARM, targeting ARMv8.2+ cores with dot-product extensions would provide an additional throughput tier beyond the NEON-based speedup we observed. The weight compression measured here (30.4\,MB int8 vs 191.5\,MB fp32 in the serialized \texttt{.params} files, a $6.30\times$ ratio) remains independently valuable for memory-constrained edge deployment regardless of compute-side dispatch.
+
+\paragraph{Scope of measurement: untuned baselines, by design.} AutoTVM/MetaSchedule tuning was not performed for two reasons. Tuning ResNet50 at the granularity required to draw meaningful conclusions takes several hours per target $\times$ configuration; at the matrix of configurations explored here, this would have exceeded ten hours of compute. More importantly, tuning under QEMU emulation produces a meaningless timing signal for the ARM target because the measurements that AutoTVM would use to score candidate schedules reflect the emulator's overhead rather than native hardware behavior. The reported numbers therefore represent default-schedule baselines -- the natural reference point for analyzing how quantization interacts with the compiler's out-of-the-box behavior, before hardware-specific tuning enters the picture. The two findings of this report (x86 int8 slowdown from dispatch miss; aarch64 int8 speedup from proper kernel selection) concern the structure of the dispatch logic and the IR, not schedule quality, and hold independently of whether tuning is applied on top.
 
 
 \begin{thebibliography}{9}
