@@ -1,0 +1,16 @@
+One or more operators have not been tuned. Please tune your model for better performance. Use DEBUG logging level to see more details.
+exported fp32 ARM artifacts
+exported int8 ARM artifacts
+done
+
+---artifact sizes---
+-rw-r--r-- 1 dimitrije dimitrije     60427 May 19 09:48 experiments/resnet50_fp32_arm.json
+-rw-r--r-- 1 dimitrije dimitrije 200779346 May 19 09:48 experiments/resnet50_fp32_arm.params
+-rwxr-xr-x 1 dimitrije dimitrije 201475440 May 19 09:48 experiments/resnet50_fp32_arm.so
+-rw-r--r-- 1 dimitrije dimitrije    113157 May 19 09:50 experiments/resnet50_int8_arm.json
+-rw-r--r-- 1 dimitrije dimitrije  31907126 May 19 09:50 experiments/resnet50_int8_arm.params
+-rwxr-xr-x 1 dimitrije dimitrije  33309304 May 19 09:50 experiments/resnet50_int8_arm.so
+
+---file types---
+experiments/resnet50_fp32_arm.so: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, BuildID[sha1]=f385b9a2b089c55ae2bcbe916c717e7858f1c14e, with debug_info, not stripped
+experiments/resnet50_int8_arm.so: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, BuildID[sha1]=a8711a5f9cebc8cb58fe1e7f3072e09fc49ede40, with debug_info, not stripped

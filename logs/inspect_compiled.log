@@ -1,0 +1,280 @@
+One or more operators have not been tuned. Please tune your model for better performance. Use DEBUG logging level to see more details.
+======================================================================
+LLVM IR (first 3000 chars):
+======================================================================
+; ModuleID = 'TVMMod'
+source_filename = "TVMMod"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-pc-linux-gnu"
+
+%0 = type { double }
+%1 = type { ptr, %2, i32, %3, ptr, ptr, i64 }
+%2 = type { i32, i32 }
+%3 = type { i8, i8, i16 }
+%4 = type { ptr, i32 }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.0 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.1 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.2 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.3 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.4 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.5 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.6 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.7 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.8 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.9 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.10 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.11 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.12 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.13 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.14 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.15 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.16 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.17 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.18 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.19 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.20 = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused = type { i32, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.21 = type { i32, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.22 = type { i32, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.23 = type { ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.24 = type { i32, ptr, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.25 = type { i32, ptr, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.26 = type { i32, ptr, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.27 = type { ptr, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.fused.28 = type { i32, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_i0.i1.fused.i2.fused = type { ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.29 = type { i32, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1.fused.ax2.outer.fused.30 = type { i32, ptr, ptr, ptr, ptr }
+%closure_loop_parallel_ax0.ax1
+
+... (3258841 total chars)
+
+======================================================================
+Assembly (first 3000 chars):
+======================================================================
+	.text
+	.file	"TVMMod"
+	.globl	tvmgen_default_fused_layout_transform
+	.p2align	4, 0x90
+	.type	tvmgen_default_fused_layout_transform,@function
+tvmgen_default_fused_layout_transform:
+.Lfunc_begin0:
+	.file	1 "." "main.tir"
+	.loc	1 0 0
+	.cfi_startproc
+	pushq	%rax
+	.cfi_def_cfa_offset 16
+.Ltmp0:
+	cmpl	$2, %edx
+	jne	.LBB0_1
+.Ltmp1:
+	movl	(%rsi), %eax
+	cmpl	$13, %eax
+	ja	.LBB0_5
+.Ltmp2:
+	movl	$8344, %ecx
+.Ltmp3:
+	btl	%eax, %ecx
+	jae	.LBB0_5
+.Ltmp4:
+	movl	4(%rsi), %eax
+	cmpl	$13, %eax
+	ja	.LBB0_8
+.Ltmp5:
+	btl	%eax, %ecx
+	jae	.LBB0_8
+.Ltmp6:
+	movq	(%rdi), %r8
+.Ltmp7:
+	cmpl	$4, 16(%r8)
+	jne	.LBB0_10
+.Ltmp8:
+	cmpw	$1, 22(%r8)
+	jne	.LBB0_14
+.Ltmp9:
+	cmpb	$32, 21(%r8)
+	jne	.LBB0_14
+.Ltmp10:
+	cmpb	$2, 20(%r8)
+	jne	.LBB0_14
+.Ltmp11:
+	movq	24(%r8), %rax
+	cmpl	$1, (%rax)
+	jne	.LBB0_16
+.Ltmp12:
+	cmpl	$3, 8(%rax)
+	jne	.LBB0_18
+.Ltmp13:
+	cmpl	$224, 16(%rax)
+	jne	.LBB0_20
+.Ltmp14:
+	cmpl	$224, 24(%rax)
+	jne	.LBB0_22
+.Ltmp15:
+	movq	8(%rdi), %rax
+	movq	(%r8), %rsi
+.Ltmp16:
+	movq	32(%r8), %r10
+	movl	12(%r8), %ecx
+	movq	(%rax), %rdi
+.Ltmp17:
+	movq	24(%rax), %r9
+.Ltmp18:
+	movq	32(%rax), %rdx
+.Ltmp19:
+	testq	%r10, %r10
+	je	.LBB0_27
+.Ltmp20:
+	cmpl	$50176, 8(%r10)
+	jne	.LBB0_58
+.Ltmp21:
+	movl	16(%r10), %r11d
+	cmpl	$224, %r11d
+	jne	.LBB0_58
+.Ltmp22:
+	movl	24(%r10), %r10d
+	cmpl	$1, %r10d
+	jne	.LBB0_58
+.Ltmp23:
+.LBB0_27:
+	cmpq	$0, 40(%r8)
+	jne	.LBB0_28
+.Ltmp24:
+	cmpl	$1, 8(%r8)
+	jne	.LBB0_30
+.Ltmp25:
+	cmpl	$5, 16(%rax)
+	jne	.LBB0_32
+.Ltmp26:
+	cmpw	$1, 22(%rax)
+	jne	.LBB0_36
+.Ltmp27:
+	cmpb	$32, 21(%rax)
+	jne	.LBB0_36
+.Ltmp28:
+	cmpb	$2, 20(%rax)
+	jne	.LBB0_36
+.Ltmp29:
+	cmpl	$1, (%r9)
+	jne	.LBB0_38
+.Ltmp30:
+	cmpl	$1, 8(%r9)
+	jne	.LBB0_40
+.Ltmp31:
+	cmpl	$224, 16(%r9)
+	jne	.LBB0_42
+.Ltmp32:
+	cmpl	$224, 24(%r9)
+	jne	.LBB0_44
+.Ltmp33:
+	cmpl	$3, 32(%r9)
+	jne	.LBB0_46
+.Ltmp34:
+	testq	%rdx, %rdx
+	je	.LBB0_51
+.Ltmp35:
+	cmpl	$672, 16(%rdx)
+	jne	.LBB0_59
+.Ltmp36:
+	movl	24(%rdx), %r8d
+	cmpl	$3, %r8d
+	jne	.LBB0_59
+.Ltmp37:
+	movl	32(%rdx), %edx
+	cmpl	$1, %edx
+	jne	.LBB0_59
+.Ltmp38:
+.LBB0_51:
+	cmpq	$0, 40(%rax)
+	jne	.LBB0_52
+.Ltmp39:
+	cmpl	$1, 8(%rax)
+	jne	.LBB0_54
+.Ltmp40:
+	cmpl	12(%rax), %ecx
+	jne	.LBB0_56
+.Ltmp41:
+	popq	%rax
+	.cfi_def_cfa_offset 8
+	jmp	tvmgen_default_fused_layout_transform_compute_
+.Ltmp42:
+.LBB0_5:
+	.cfi_def_cfa_offset 16
+	movq	__TVMAPISetLastError@GOTPCREL(%rip), %rax
+	leaq	.L.str.1(%rip), %rdi
+.Ltmp43:
+	callq	*(%rax)
+.Ltmp44:
+	movl	$-1, %eax
+	popq	%rcx
+	.cfi_def_cfa_offset 8
+	retq
+.Ltmp45:
+.LBB0_8:
+	.cfi_def_cfa_offset 16
+	movq	__TVMAPISetLastError@GOTPCREL(%rip), %rax
+	leaq	.L.str.2(%rip), %rdi
+.Ltmp46:
+	callq	*(%rax)
+.Ltmp47:
+	movl	$-1, %eax
+	popq	%rcx
+	.cfi_def_cfa_offset 8
+	retq
+.Ltmp48:
+.LBB0_1:
+	.cfi_def_cfa_offset 16
+	movq	__TVMAPISetLastError@GOTPCREL(%rip), %rax
+	leaq	.L.str(%rip), %rdi
+.Ltmp49:
+	callq	*(%rax)
+.Ltmp50:
+	movl	$-1, %eax
+	popq	%rcx
+	.cfi_def_cfa_offset 8
+	retq
+.Ltmp51:
+.LBB0_10:
+	.cfi_def_cfa_offset 16
+	movq	__TVMAPISetLastError@GOTPCREL(%rip), %rax
+	leaq	.L.str.3(%rip), %rdi
+.Ltmp52:
+	callq	*(%rax)
+.Ltmp53:
+	movl	$-1, %eax
+	popq	%rcx
+	.cfi_def_cfa_o
+
+... (2250219 total chars)
+
+======================================================================
+Graph JSON excerpt (first 2000 chars):
+======================================================================
+Number of nodes: 215
+Node op types: {'tvm_op', 'null'}
+
+First 20 nodes:
+  [  0] op=null         name=input0
+  [  1] op=tvm_op       name=tvmgen_default_fused_layout_transform
+  [  2] op=null         name=p0
+  [  3] op=null         name=p1
+  [  4] op=tvm_op       name=tvmgen_default_fused_nn_contrib_conv2d_NCHWc_add_nn_relu
+  [  5] op=tvm_op       name=tvmgen_default_fused_nn_max_pool2d
+  [  6] op=tvm_op       name=tvmgen_default_fused_layout_transform_1
+  [  7] op=null         name=p2
+  [  8] op=null         name=p3
+  [  9] op=tvm_op       name=tvmgen_default_fused_nn_contrib_conv2d_NCHWc_add_nn_relu_1
+  [ 10] op=tvm_op       name=tvmgen_default_fused_layout_transform_2
+  [ 11] op=null         name=p4
+  [ 12] op=null         name=p5
+  [ 13] op=tvm_op       name=tvmgen_default_fused_nn_contrib_conv2d_NCHWc_add_nn_relu_2
+  [ 14] op=tvm_op       name=tvmgen_default_fused_layout_transform_3
+  [ 15] op=null         name=p6
+  [ 16] op=null         name=p7
+  [ 17] op=tvm_op       name=tvmgen_default_fused_layout_transform_3_1
+  [ 18] op=null         name=p8
+  [ 19] op=null         name=p9
+
+Done.
