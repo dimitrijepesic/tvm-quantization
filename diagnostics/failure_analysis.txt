@@ -5,15 +5,6 @@ Each bitwidth fails at a different stage of the TVM pipeline, which reveals
 that there is no unified validation layer — each pass imposes its own
 dtype-specific assumptions independently.
 
-Note: prior versions of this file documented different failure modes for
-int4 (clean ICHECK in CodeGenLLVM) and int2 (SEGFAULT). Those descriptions
-were observed in an earlier environment; in the current setup
-(libtvm.so built May 6 on WSL-Ubuntu-22.04, Python 3.10.12, glibc 2.35)
-the empirical failure modes for int4 and int2 are different from the
-prior write-up. The descriptions below reflect raw output from the
-current logs/int{1,2,4}_native.log and source verification against the
-TVM tree in tvm-quantization/tvm/.
-
 
 int4 native — relay.build() does not terminate
 ----------------------------------------------

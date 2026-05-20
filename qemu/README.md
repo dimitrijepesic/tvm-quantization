@@ -106,5 +106,3 @@ The output is the file in `logs/qemu_bench.log`.
   branch predictor, or cache hierarchy; absolute latencies are much
   higher than native Pi 4. The fp32-vs-int8 ratio remains informative
   because both configurations pay the same emulation cost.
-- For a PyTorch fallback (if the TVM runtime won't build inside the
-  guest), see `run_inference_pytorch.py`.

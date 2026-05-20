@@ -1,11 +1,18 @@
-## sub-byte quantization of resnet50 in "logical" mode: nbit=4/2/1 but dtype stays int8
-## (sub-byte values packed in int8 storage so default int8 kernels handle them)
-##
-## fp32 and int8 baselines live in 01_bench_fp32_vs_int8.py — not repeated here.
-## native sub-byte storage (dtype="int{n}") fails or segfaults during quantize/build;
-## those cases live in diagnostics/probe_int{n}.py with proper instrumentation.
+"""
+Sub-byte quantization of ResNet50 in "logical" mode: nbit=4/2/1 but
+dtype stays int8.
 
-# imports
+The quantization pass clips activations and weights to an N-bit effective
+range, but the IR's storage dtype remains int8 (each value still occupies
+a full byte — no actual packing). This isolates the question "does
+sub-byte fail because of quantization logic or because of downstream
+dtype handling?" — see Section 3.2.4 in the report.
+
+fp32 and int8 baselines live in 01_bench_fp32_vs_int8.py — not repeated
+here. Native sub-byte storage (dtype="int{n}") fails or hangs during
+quantize/build; those cases live in diagnostics/probe_int{n}.py with
+proper instrumentation.
+"""
 import tvm
 from tvm import relay
 from tvm.contrib import graph_executor

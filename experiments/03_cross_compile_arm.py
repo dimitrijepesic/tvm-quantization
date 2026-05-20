@@ -1,8 +1,21 @@
-## cross-compile fp32 and int8 resnet50 to raspberry pi (aarch64) using tvm
-## exports three files per model: .so (shared library), .json (graph), .params (weights)
-## these are later loaded on the target device (or qemu emulator) for benchmarking
+"""
+Cross-compile fp32 and int8 ResNet50 to aarch64 (Cortex-A72, Raspberry Pi 4).
 
-# imports
+Workflow:
+  1. Load and import ResNet50 as in 01_bench_fp32_vs_int8.py
+  2. Set target to llvm with arm_cpu device, aarch64-linux-gnu triple,
+     cortex-a72 CPU
+  3. Build fp32 model, export .so/.json/.params via cross-compiler
+     (aarch64-linux-gnu-gcc)
+  4. Apply int8 quantization and repeat the export for the quantized
+     model
+
+Output: six files (resnet50_{fp32,int8}_arm.{so,json,params}) in the
+experiments/ directory. These are loaded inside the aarch64 QEMU guest
+by qemu/run_bench_in_vm.py.
+
+Run: python 03_cross_compile_arm.py 2>&1 | tee ../logs/cross_compile_arm.log
+"""
 import os
 
 import tvm

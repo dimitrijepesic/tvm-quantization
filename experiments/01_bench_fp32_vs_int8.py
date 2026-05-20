@@ -1,6 +1,18 @@
-## Benchmark FP32 vs INT8 (quantized) ResNet50 inference on CPU using TVM
+"""
+Benchmark FP32 vs INT8 (post-training quantized) ResNet50 on x86 CPU.
 
-# imports
+Workflow:
+  1. Load pretrained ResNet50 from torchvision (IMAGENET1K_V2 weights)
+  2. Trace to TorchScript, import to Relay IR
+  3. Compile to x86 (LLVM backend) and benchmark over 100 runs
+  4. Apply post-training int8 quantization via relay.quantize
+  5. Compile and benchmark the quantized model
+
+Output: TVM benchmark() summaries (mean/median/std/min/max in ms).
+Captured in: logs/fp32_int8_bench.log
+
+Run: python 01_bench_fp32_vs_int8.py 2>&1 | tee ../logs/fp32_int8_bench.log
+"""
 import tvm
 from tvm import relay
 from tvm.contrib import graph_executor
