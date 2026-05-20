@@ -1,0 +1,257 @@
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]
+[    0.000000] Linux version 6.6.51+rpt-rpi-v8 (serge@raspberrypi.com) (gcc-12 (Debian 12.2.0-14) 12.2.0, GNU ld (GNU Binutils for Debian) 2.40) #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08)
+[    0.000000] KASLR disabled due to lack of seed
+[    0.000000] Machine model: Raspberry Pi 4 Model B
+[    0.000000] earlycon: pl11 at MMIO 0x00000000fe201000 (options '')
+[    0.000000] printk: bootconsole [pl11] enabled
+[    0.000000] efi: UEFI not found.
+[    0.000000] Reserved memory: created CMA memory pool at 0x000000002c000000, size 64 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x000000002c000000..0x000000002fffffff (65536 KiB) map reusable linux,cma
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000000000000-0x000000003bffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x000000003bffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x000000003bffffff]
+[    0.000000] On node 0, zone DMA: 16384 pages in unavailable ranges
+[    0.000000] percpu: Embedded 30 pages/cpu s85672 r8192 d29016 u122880
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.000000] CPU features: detected: Spectre-v2
+[    0.000000] CPU features: detected: Spectre-v3a
+[    0.000000] CPU features: detected: Spectre-v4
+[    0.000000] CPU features: detected: Spectre-BHB
+[    0.000000] CPU features: detected: ARM erratum 1742098
+[    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: earlycon=pl011,0xfe201000 console=serial0,115200 rdinit=/init
+[    0.000000] Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 241920
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] Memory: 825600K/983040K available (13440K kernel code, 2212K rwdata, 4268K rodata, 4864K init, 1083K bss, 91904K reserved, 65536K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=1
+[    0.000000] ftrace: allocating 43242 entries in 169 pages
+[    0.000000] ftrace: allocated 169 pages with 4 groups
+[    0.000000] trace event string verifier disabled
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=256 to nr_cpu_ids=4.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Rude variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=4
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GIC: Using split EOI/Deactivate mode
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer(s) running at 62.50MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0x1ffffffffffffff max_cycles: 0x1cd42e208c, max_idle_ns: 881590405314 ns
+[    0.000129] sched_clock: 57 bits at 63MHz, resolution 16ns, wraps every 4398046511096ns
+[    0.011164] Console: colour dummy device 80x25
+[    0.013370] Calibrating delay loop (skipped), value calculated using timer frequency.. 125.00 BogoMIPS (lpj=250000)
+[    0.014326] pid_max: default: 32768 minimum: 301
+[    0.016540] LSM: initializing lsm=capability,integrity
+[    0.021064] Mount-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.021666] Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.047384] cgroup: Disabling memory control group subsystem
+[    0.088589] RCU Tasks: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1.
+[    0.090246] RCU Tasks Rude: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1.
+[    0.091698] RCU Tasks Trace: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1.
+[    0.094899] rcu: Hierarchical SRCU implementation.
+[    0.095316] rcu: 	Max phase no-delay instances is 1000.
+[    0.104212] EFI services will not be available.
+[    0.107982] smp: Bringing up secondary CPUs ...
+[    0.113817] Detected PIPT I-cache on CPU1
+[    0.115719] CPU1: Booted secondary processor 0x0000000001 [0x410fd083]
+[    0.123097] Detected PIPT I-cache on CPU2
+[    0.123490] CPU2: Booted secondary processor 0x0000000002 [0x410fd083]
+[    0.125579] Detected PIPT I-cache on CPU3
+[    0.125914] CPU3: Booted secondary processor 0x0000000003 [0x410fd083]
+[    0.126662] smp: Brought up 1 node, 4 CPUs
+[    0.129528] SMP: Total of 4 processors activated.
+[    0.129948] CPU features: detected: 32-bit EL0 Support
+[    0.130405] CPU features: detected: 32-bit EL1 Support
+[    0.130803] CPU features: detected: CRC32 instructions
+[    0.135145] CPU: All CPU(s) started at EL2
+[    0.135804] alternatives: applying system-wide alternatives
+[    0.165367] devtmpfs: initialized
+[    0.191276] Enabled cp15_barrier support
+[    0.191924] Enabled setend support
+[    0.193616] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.194681] futex hash table entries: 1024 (order: 4, 65536 bytes, linear)
+[    0.201207] pinctrl core: initialized pinctrl subsystem
+[    0.208672] DMI not present or invalid.
+[    0.224437] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.239465] DMA: preallocated 128 KiB GFP_KERNEL pool for atomic allocations
+[    0.242056] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.243056] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.244022] audit: initializing netlink subsys (disabled)
+[    0.247094] audit: type=2000 audit(0.204:1): state=initialized audit_enabled=0 res=1
+[    0.250956] thermal_sys: Registered thermal governor 'step_wise'
+[    0.251508] cpuidle: using governor menu
+[    0.253251] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.255341] ASID allocator initialised with 65536 entries
+[    0.257880] Serial: AMBA PL011 UART driver
+[    0.278388] bcm2835-mbox fe00b880.mailbox: mailbox enabled
+[    0.302810] raspberrypi-firmware soc:firmware: Attached to firmware from 1970-01-05T00:12:17, variant unknown
+[    0.310419] raspberrypi-firmware soc:firmware: Firmware hash is 0000000000000000000000000000000000000000
+[    0.343727] Modules: 26256 pages in range for non-PLT usage
+[    0.343797] Modules: 517776 pages in range for PLT usage
+[    0.383439] bcm2835-dma fe007000.dma-controller: DMA legacy API manager, dmachans=0x1
+[    0.400301] iommu: Default domain type: Translated
+[    0.401773] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.405608] SCSI subsystem initialized
+[    0.411108] usbcore: registered new interface driver usbfs
+[    0.412202] usbcore: registered new interface driver hub
+[    0.413589] usbcore: registered new device driver usb
+[    0.424087] pps_core: LinuxPPS API ver. 1 registered
+[    0.424723] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.425839] PTP clock support registered
+[    0.458456] vgaarb: loaded
+[    0.469893] clocksource: Switched to clocksource arch_sys_counter
+[    0.482642] VFS: Disk quotas dquot_6.6.0
+[    0.483413] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    0.486648] FS-Cache: Loaded
+[    0.489855] CacheFiles: Loaded
+[    0.608488] NET: Registered PF_INET protocol family
+[    0.613863] IP idents hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.630151] tcp_listen_portaddr_hash hash table entries: 512 (order: 1, 8192 bytes, linear)
+[    0.631337] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.632226] TCP established hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.633402] TCP bind hash table entries: 8192 (order: 6, 262144 bytes, linear)
+[    0.634811] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.638976] MPTCP token hash table entries: 1024 (order: 2, 24576 bytes, linear)
+[    0.640311] UDP hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.641848] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.645830] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.654999] RPC: Registered named UNIX socket transport module.
+[    0.655756] RPC: Registered udp transport module.
+[    0.656289] RPC: Registered tcp transport module.
+[    0.656747] RPC: Registered tcp-with-tls transport module.
+[    0.657278] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.660443] PCI: CLS 0 bytes, default 64
+[    0.668356] Trying to unpack rootfs image as initramfs...
+[    0.680810] kvm [1]: IPA Size Limit: 44 bits
+[    0.694341] kvm [1]: vgic interrupt IRQ9
+[    0.713376] kvm [1]: Hyp mode initialized successfully
+[    3.045665] Freeing initrd memory: 45100K
+[    3.211278] Initialise system trusted keyrings
+[    3.215373] workingset: timestamp_bits=46 max_order=18 bucket_order=0
+[    3.216795] zbud: loaded
+[    3.225222] NFS: Registering the id_resolver key type
+[    3.227175] Key type id_resolver registered
+[    3.227644] Key type id_legacy registered
+[    3.228487] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    3.229243] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    3.236962] Key type asymmetric registered
+[    3.237518] Asymmetric key parser 'x509' registered
+[    3.238662] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 247)
+[    3.240845] io scheduler mq-deadline registered
+[    3.241444] io scheduler kyber registered
+[    3.242582] io scheduler bfq registered
+[    3.266946] pinctrl-bcm2835 fe200000.gpio: GPIO_OUT persistence: yes
+[    3.271794] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 0 config (0 80)
+[    3.274573] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 1 config (0 81)
+[    3.275970] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 2 config (0 82)
+[    3.277093] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 3 config (0 83)
+[    3.278279] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 4 config (0 84)
+[    3.279486] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 5 config (0 85)
+[    3.280671] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 6 config (0 86)
+[    3.283176] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 7 config (0 87)
+[    3.288236] bcm2708_fb soc:fb: FB found 1 display(s)
+[    3.322607] Console: switching to colour frame buffer device 100x30
+[    3.330037] bcm2708_fb soc:fb: Registered framebuffer for display 0, size 800x480
+[    3.351639] vc-mem: phys_addr:0x00000000 mem_base=0x00000000 mem_size:0x00000000(0 MiB)
+[    3.427741] brd: module loaded
+[    3.466350] loop: module loaded
+[    3.472370] Loading iSCSI transport class v2.0-870.
+[    3.489574] usbcore: registered new device driver r8152-cfgselector
+[    3.490916] usbcore: registered new interface driver r8152
+[    3.491578] usbcore: registered new interface driver lan78xx
+[    3.492285] usbcore: registered new interface driver smsc95xx
+[    3.493837] dwc_otg: version 3.00a 10-AUG-2012 (platform bus)
+[    3.498864] usbcore: registered new interface driver uas
+[    3.499780] usbcore: registered new interface driver usb-storage
+[    3.503972] mousedev: PS/2 mouse device common for all mice
+[    3.527858] sdhci: Secure Digital Host Controller Interface driver
+[    3.528578] sdhci: Copyright(c) Pierre Ossman
+[    3.529597] sdhci-pltfm: SDHCI platform and OF driver helper
+[    3.538135] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 2 config (0 82)
+[    3.539536] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 2 config (0 82)
+[    3.540549] leds-gpio: probe of leds failed with error -5
+[    3.545847] ledtrig-cpu: registered to indicate activity on CPUs
+[    3.549278] hid: raw HID events driver (C) Jiri Kosina
+[    3.552097] usbcore: registered new interface driver usbhid
+[    3.552656] usbhid: USB HID core driver
+[    3.592940] hw perfevents: enabled with armv8_cortex_a72 PMU driver, 7 counters available
+[    3.615938] NET: Registered PF_PACKET protocol family
+[    3.618858] Key type dns_resolver registered
+[    3.696643] registered taskstats version 1
+[    3.699814] Loading compiled-in X.509 certificates
+[    3.735429] Key type .fscrypt registered
+[    3.735924] Key type fscrypt-provisioning registered
+[    3.765591] uart-pl011 fe201000.serial: there is not valid maps for state default
+[    3.769891] uart-pl011 fe201000.serial: cts_event_workaround enabled
+[    3.776444] fe201000.serial: ttyAMA1 at MMIO 0xfe201000 (irq = 31, base_baud = 0) is a PL011 rev2
+[    3.780194] serial serial0: tty port ttyAMA1 registered
+[    3.786566] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 5 config (0 85)
+[    3.786686] bcm2835-aux-uart fe215040.serial: there is not valid maps for state default
+[    3.788394] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 5 config (0 85)
+[    3.789788] reg-fixed-voltage cam1_regulator: error -EIO: can't get GPIO
+[    3.790980] reg-fixed-voltage: probe of cam1_regulator failed with error -5
+[    3.793609] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 4 config (0 84)
+[    3.796133] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 6 config (0 86)
+[    3.797600] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 6 config (0 86)
+[    3.799485] reg-fixed-voltage regulator-sd-vcc: error -EIO: can't get GPIO
+[    3.800193] reg-fixed-voltage: probe of regulator-sd-vcc failed with error -5
+[    3.801243] raspberrypi-exp-gpio soc:firmware:gpio: Failed to get GPIO 4 config (0 84)
+[    3.802036] bcm2835-aux-uart fe215040.serial: error -EINVAL: unable to register 8250 port
+[    3.804333] gpio-regulator: probe of regulator-sd-io-1v8 failed with error -5
+[    3.806598] bcm2835-aux-uart: probe of fe215040.serial failed with error -22
+[    3.812861] bcm2835-wdt bcm2835-wdt: Broadcom BCM2835 watchdog timer
+[    3.814857] bcm2835-power bcm2835-power: ASB register ID returned 0x00000000
+[    3.823094] mmc-bcm2835 fe300000.mmcnr: mmc_debug:0 mmc_debug2:0
+[    3.823878] mmc-bcm2835 fe300000.mmcnr: DMA channel allocated
+[    3.859414] of_cfs_init
+[    3.862906] of_cfs_init: OK
+[    3.867110] clk: Disabling unused clocks
+[    3.871002] Warning: unable to open an initial console.
+[    3.986447] Freeing unused kernel memory: 4864K
+[    3.991410] Run /init as init process
+[    4.056195] mmc1: Failed to initialize a non-removable card
+[    4.151513] resnet50_bench: init started, kmsg redirection active
+[    4.155007] 
+[    4.155007] =========================================================
+[    4.156226]   raspi4b ResNet50 inference (TVM C++ runtime, PID 1)
+[    4.157162] =========================================================
+[    4.158701] 
+[    4.158701] ---- fp32 ----
+[    4.159166] loading /resnet50_fp32_arm.so
+[    4.186894] fp32 FAILED: [00:00:04] /home/dimitrije/tvm-quantization/tvm/src/runtime/dso_library.cc:125: InternalError: Check failed: (lib_handle_ != nullptr) is false: Failed to load dynamic shared library /resnet50_fp32_arm.so /resnet50_fp32_arm.so: cannot open shared object file: No such file or directory
+[    4.186894] 
+[    4.190181] 
+[    4.190181] ---- int8 ----
+[    4.190631] loading /resnet50_int8_arm.so
+[   12.308999] int8 warmup: 6.294s
+[   13.909134] platform fe340000.mmc: deferred probe pending
+[   18.209562] int8 run[0]: 5.899s
+[   23.993338] int8 run[1]: 5.783s
+[   29.692874] int8 run[2]: 5.698s
+[   35.274998] int8 run[3]: 5.578s
+[   40.944674] int8 run[4]: 5.669s
+[   40.945294] int8 MEAN over 5 runs: 5.725s (warmup excluded)
+[   40.949468] int8 output argmax=812  value=5.8700
+[   41.090141] 
+[   41.090141] =========================================================
+[   41.091425]   SUMMARY (raspi4b, emulated Cortex-A72, TCG)
+[   41.092100] =========================================================
+[   41.094030] fp32 mean : 0.000 s (warmup 0.000 s)
+[   41.094888] int8 mean : 5.725 s (warmup 6.294 s)
+[   41.095622] int8 / fp32 ratio: infx
+[   41.096927]   (int8 slower)
+[   41.107667] kvm: exiting hardware virtualization
+[   41.115104] reboot: Power down

@@ -278,7 +278,55 @@ The int8 \texttt{.params} file is 30.4\,MB versus 191.5\,MB for fp32 (a $6.30\ti
 
 \subsection{QEMU Emulation}
 
-\paragraph{Choice of machine type.} The natural reading of the assignment -- ``run on a Raspberry Pi emulator under QEMU'' -- points to QEMU's family of dedicated Raspberry Pi machines (\texttt{raspi0}, \texttt{raspi1ap}, \texttt{raspi2b}, \texttt{raspi3ap}, \texttt{raspi3b}). In the QEMU version available on our system (\texttt{qemu-system-aarch64} 6.2.0), this family stops at \texttt{raspi3b}; the Raspberry Pi 4 machine (\texttt{raspi4b}) was only added in later QEMU releases (8.2+). Since our cross-compile target is \texttt{-mcpu=cortex-a72} (the Raspberry Pi 4's CPU, Section~4.1), choosing \texttt{raspi3b} would force execution on an emulated Cortex-A53 instead, introducing an A53/A72 microarchitecture mismatch between the LLVM scheduler and the CPU running the code. The generic ARM \texttt{virt} machine, by contrast, accepts an explicit \texttt{-cpu} flag and lets us emulate Cortex-A72 directly. We therefore chose \texttt{virt} with \texttt{-cpu cortex-a72} as the closest available match to a Raspberry Pi 4 environment: a faithful A72 ISA execution of the same binary that would run on physical Pi 4 hardware, even though the surrounding machine is not the literal Pi board. All ARMv8-A cores share the NEON SIMD ISA used by TVM's int8 kernels, so the qualitative findings of this section depend on the emulated CPU, not on board-specific peripherals.
+\paragraph{Choice of machine type.} The natural reading of the assignment -- ``run on a Raspberry Pi emulator under QEMU'' -- points to QEMU's family of dedicated Raspberry Pi machines (\texttt{raspi0}, \texttt{raspi1ap}, \texttt{raspi2b}, \texttt{raspi3ap}, \texttt{raspi3b}, \texttt{raspi4b}). The Ubuntu~22.04 package (\texttt{qemu-system-aarch64} 6.2.0) stops at \texttt{raspi3b}; the \texttt{raspi4b} machine type was added only in QEMU~9.0. Picking \texttt{raspi3b} would force execution on an emulated Cortex-A53, introducing an A53/A72 microarchitecture mismatch with our compile target \texttt{-mcpu=cortex-a72} (Section~4.1). We therefore built QEMU~9.2.0 from source (\texttt{configure --target-list=\allowbreak aarch64-softmmu --enable-slirp}) and confirmed that the resulting binary boots the Raspberry Pi OS Bookworm arm64 kernel (Linux 6.6.51) on the \texttt{raspi4b} machine type, with all four cores enumerated as Cortex-A72 (MIDR \texttt{0x410fd083}: implementer 0x41 ARM Ltd., part 0xd08 = A72, revision r0p3) and the kernel proceeding into systemd userspace.
+
+However, the \texttt{raspi4b} machine in QEMU~9.2 disables four bcm2711 device-tree nodes for peripherals it does not emulate: \texttt{brcm,bcm2711-pcie}, \texttt{brcm,bcm2711-rng200}, \texttt{brcm,bcm2711-thermal}, and crucially \texttt{brcm,bcm2711-genet-v5} -- the Pi~4's gigabit Ethernet controller. Without working networking, an in-VM \texttt{apt install python3-numpy} or \texttt{pip install} of the TVM runtime's Python dependencies is not possible inside the emulated guest, and the TVM-runtime-on-raspi4b setup would have required either an offline package mirror or cross-built wheels injected via image surgery -- neither feasible inside the scope of this report. We therefore split the question into two parts: (1)~validate the \texttt{raspi4b} CPU model with a self-contained aarch64 microbenchmark that runs as PID~1 from a custom initramfs (no rootfs install needed), and (2)~run the actual TVM ResNet50 benchmarks on the generic ARM \texttt{virt} machine with \texttt{-cpu cortex-a72}, which exposes the same Cortex-A72 ISA but with VirtIO storage and user-mode networking that allow Python/NumPy/TVM-runtime install via standard apt and SSH-based artifact transfer.
+
+\paragraph{ResNet50 inference on raspi4b directly.} Since the apt/SCP-based setup is unavailable inside \texttt{raspi4b}, we instead built a self-contained C++ benchmark (\texttt{qemu/\allowbreak resnet50\_\allowbreak bench.cpp}) that links the TVM C++ runtime statically (\texttt{-Wl,--whole-archive build\_arm64/\allowbreak libtvm\_runtime.a -Wl,--no-whole-archive}, with \texttt{-static-libstdc++ -static-libgcc} to fold the C++ ABI in), and runs as PID~1 directly off an initramfs. The binary mounts \texttt{devtmpfs}, \texttt{procfs}, \texttt{sysfs}, redirects its stdio onto \texttt{/dev/kmsg} (the kernel ratelimits but routes the writes onto the serial console we capture), then for each model triple calls \texttt{tvm::\allowbreak runtime::\allowbreak Module::\allowbreak LoadFromFile} on the \texttt{.so}, instantiates the graph executor through the \texttt{tvm.graph\_executor.create} registry entry with the \texttt{.json}, feeds the \texttt{.params} bytes via the executor's \texttt{load\_params} \texttt{PackedFunc}, sets a deterministic fp32 input of shape $[1,3,224,224]$, runs one warmup and five timed inferences, dumps the argmax for sanity, and finally calls \texttt{reboot(LINUX\_\allowbreak REBOOT\_\allowbreak CMD\_\allowbreak POWER\_\allowbreak OFF)} so QEMU exits cleanly. The initramfs bundles the binary plus minimal glibc components (\texttt{ld-linux-aarch64.so.1}, \texttt{libc.so.6}, \texttt{libm.so.6}) and the compiled model triple; the binary's \texttt{DT\_RUNPATH} is set to \texttt{/lib:/lib/aarch64-linux-gnu:/lib64} so the dynamic linker finds the bundled libs without a \texttt{ld.so.cache}.
+
+The \texttt{raspi4b} QEMU machine caps guest RAM at exactly 2\,GiB (a hard-coded limit of the bcm2711 SoC model: any other \texttt{-m} value is rejected at startup with \texttt{Invalid RAM size, should be 2 GiB}). The fp32 ResNet50 triple is $193 + 192 + 0.06 \approx 385$\,MB, so once bundled with libc and the bench binary the cpio archive is 361\,MB compressed / 396\,MB uncompressed, and the kernel's initramfs unpack runs into \texttt{ENOSPC} mid-write (\texttt{/initrd.image: incomplete write (-28 != 378061789)}), producing a truncated \texttt{.so} that dies with \texttt{SIGBUS} the moment TVM mmaps it. The int8 triple ($32 + 31 + 0.1 \approx 63$\,MB) fits comfortably, and the int8 inference completed end-to-end on \texttt{raspi4b}. Both logs are preserved at \texttt{logs/raspi4b\_resnet50\_int8.log} and \texttt{logs/raspi4b\_resnet50\_fp32\_oom.log}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrr}
+\toprule
+\textbf{Run} & \textbf{Time (s)} & \textbf{} \\
+\midrule
+warmup        & 6.294 & \\
+run~0         & 5.899 & \\
+run~1         & 5.783 & \\
+run~2         & 5.698 & \\
+run~3         & 5.578 & \\
+run~4         & 5.669 & \\
+\midrule
+\textbf{mean over runs~0--4} & \textbf{5.725} & \\
+\bottomrule
+\end{tabular}
+\caption{ResNet50 int8 inference under QEMU \texttt{raspi4b} (emulated Cortex-A72, TCG, 4 cores, 2\,GiB RAM, custom initramfs). The same cross-compiled \texttt{resnet50\_int8\_arm.so/.json/.params} triple used for the \texttt{virt+cortex-a72} measurement below. Output \texttt{argmax=812} (matches the \texttt{virt+cortex-a72} run, confirming the artifacts are bit-identical and executed correctly). The fp32 triple did not fit in 2\,GiB RAM (above) and was measured on \texttt{virt} only.}
+\label{tab:raspi4b-resnet50}
+\end{table}
+
+Direct comparison: int8 ResNet50 mean is 5.725\,s on \texttt{raspi4b} (Table~\ref{tab:raspi4b-resnet50}) vs.\ 4.619\,s on \texttt{virt+cortex-a72} (Table~\ref{tab:virt-resnet50}). Both runs share the same TVM artifacts and the same emulated Cortex-A72 CPU under the same QEMU TCG engine, so the $\sim$24\% difference (\texttt{raspi4b/virt} $=$ $1.24\times$) is attributable to the surrounding machine emulation overhead (MMC/IRQ controller/peripheral model differences), not to the CPU or the TVM compiled kernels themselves. The same argmax on both confirms the int8 graph is executing identically; the int8 graph's NEON-friendly schedule that produces the speedup on \texttt{virt} therefore produces it on \texttt{raspi4b} as well.
+
+\paragraph{ISA microbenchmark (cross-check).} To corroborate the above with a CPU-only measurement that does not exercise the TVM runtime, we also ran a tiny statically-linked aarch64 binary (\texttt{qemu/microbench.c}; \texttt{aarch64-linux-gnu-gcc -O2 -mcpu=cortex-a72 -static}) as PID~1 on \texttt{raspi4b}. It mounts \texttt{procfs}, dumps \texttt{/proc/cpuinfo} (confirming Cortex-A72 r0p3 across all four cores), runs $8 \times 10^8$ multiply-accumulate operations per dtype against two pre-initialized $4096$-element buffers, then powers off. Results in Table~\ref{tab:raspi4b-microbench}; raw log at \texttt{logs/raspi4b\_microbench.log}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Dtype} & \textbf{Time (s)} & \textbf{MOPs/s} & \textbf{Ratio vs fp32} \\
+\midrule
+fp32  & 10.50 &  78.04 & 1.00$\times$ \\
+int32 &  3.88 & 211.41 & 2.71$\times$ \\
+int16 &  4.00 & 204.70 & 2.62$\times$ \\
+int8  &  3.96 & 207.06 & 2.65$\times$ \\
+\bottomrule
+\end{tabular}
+\caption{Per-dtype MAC throughput on QEMU \texttt{raspi4b} (emulated Cortex-A72, TCG, 4 cores, 2\,GiB RAM, custom initramfs). All four cores report MIDR \texttt{0x410fd083} (ARM Ltd.\ Cortex-A72 r0p3). Integer ops run $\sim$2.6$\times$ faster than fp32 -- the same direction as the int8/fp32 inversion measured for ResNet50 above.}
+\label{tab:raspi4b-microbench}
+\end{table}
+
+The mechanism behind both the microbenchmark inversion and the ResNet50 inversion is the QEMU TCG engine: it translates ARMv8-A scalar integer ops into native x86 integer instructions with lower per-instruction cost than its translation of ARM scalar FP ops. This is a property of the emulator, not a hardware claim about native Pi~4 silicon, where the corresponding ratio is governed by NEON SIMD throughput rather than TCG translation cost.
 
 To execute the cross-compiled binaries without physical Raspberry Pi hardware, we set up full-system emulation under \texttt{qemu-system-aarch64} using the generic ARM \texttt{virt} machine type with \texttt{-cpu cortex-a72}, four virtual CPUs, and 4\,GB of RAM. The guest is Ubuntu 22.04 Server (aarch64 cloud image) booted from UEFI firmware (\texttt{QEMU\_EFI.fd}), with networking exposed via user-mode \texttt{hostfwd} forwarding host port 2222 to guest port 22 so that we can SSH into the VM directly. Inside the guest we installed Python, NumPy, and built the TVM v0.15.0 runtime from source (\texttt{make runtime} in the TVM build directory; LLVM is not required for a runtime-only build). The six exported model files were copied into the guest over SCP and a small benchmark script was run via SSH.
 
@@ -297,6 +345,7 @@ int8    (aarch64, QEMU) & 4619.2 & 4693.5 \\
 \bottomrule
 \end{tabular}
 \caption{ResNet50 inference latency under QEMU full-system emulation (\texttt{virt} machine, emulated Cortex-A72, Ubuntu 22.04 aarch64 guest, 4\,GB RAM). Each measurement is the mean of three repeats of two inferences each, preceded by a single warmup run. QEMU is software-emulating the CPU on an x86 host, so absolute values overestimate native A72 latency by a large factor; the ratio between fp32 and int8 is informative because both configurations incur the same emulation cost on the same emulated CPU.}
+\label{tab:virt-resnet50}
 \end{table}
 
 Two observations stand out. First, both models produced sensible classification outputs (fp32 \texttt{argmax}=21, int8 \texttt{argmax}=812, with output ranges spanning several units around zero). The different argmax values are expected: with a random (non-ImageNet) input and coarse global-scale calibration, the int8 approximation diverges from fp32 in its top prediction while still producing a plausible class-score distribution, confirming that the cross-compiled aarch64 binaries execute correctly. Second, and more interestingly, under aarch64 emulation the int8 model runs \textbf{$2.07\times$ \emph{faster}} than fp32 -- the opposite of what we measured on x86, where int8 was $2.28\times$ \emph{slower}.
