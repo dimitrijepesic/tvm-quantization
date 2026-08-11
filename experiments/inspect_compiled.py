@@ -12,8 +12,6 @@ default "llvm" target (no -mcpu advertising VNNI), dispatch falls
 through to the generic kernel — so VPDPBUSD should NOT appear, even in
 the int8 build. This script verifies that empirically.
 
-Output captured in: logs/inspect_compiled.log
-
 Run: python inspect_compiled.py 2>&1 | tee ../logs/inspect_compiled.log
 """
 import json
