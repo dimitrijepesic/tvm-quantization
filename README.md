@@ -10,7 +10,7 @@ to int8, comparing it against fp32, investigating why the expected
 speedup does not materialize on x86, testing sub-byte precisions (int4,
 int2, int1), and cross-compiling to aarch64 for validation under QEMU.
 
-See `main.pdf` for the full report.
+See `TVM_quantization_report.pdf` for the full report.
 
 ## Key findings
 
