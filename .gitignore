@@ -4,6 +4,18 @@ experiments/resnet50_*_arm.so
 experiments/resnet50_*_arm.params
 experiments/resnet50_*_arm.json
 
+# Compiled aarch64 QEMU benchmark binaries (rebuild from qemu/*.c[pp];
+# build commands in qemu/README.md and the source file headers)
+qemu/microbench
+qemu/resnet50_bench
+
+# QEMU guest artifacts (see qemu/README.md)
+qemu/*.img
+qemu/user-data
+qemu/meta-data
+qemu/initramfs*
+qemu/*.cpio.gz
+
 # Python build artifacts
 __pycache__/
 *.py[cod]
@@ -26,3 +38,4 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+*Zone.Identifier
