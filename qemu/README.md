@@ -1,17 +1,40 @@
-# QEMU aarch64 Ubuntu emulation (Cortex-A72)
+# QEMU AArch64 emulation (Cortex-A72)
 
-## Setup rationale
+Two complementary QEMU setups are used, both emulating a Cortex-A72 (the
+Raspberry Pi 4's CPU, matching the `-mcpu=cortex-a72` compile target in
+`experiments/03_cross_compile_arm.py`):
 
-The project specification asks for a Raspberry Pi emulator under QEMU. The
-QEMU version available on our build host (`qemu-system-aarch64` 6.2.0) only
-ships Raspberry Pi machine types up to `raspi3b` (Cortex-A53); the
-`raspi4b` model (Cortex-A72) was added in QEMU 8.2+ and is not available
-here. Since our cross-compile target is `-mcpu=cortex-a72` (the Pi 4's
-CPU; see `experiments/03_cross_compile_arm.py`), running on `raspi3b`
-would force a Cortex-A53 microarchitecture, mismatched with the LLVM
-scheduler. The generic ARM `virt` machine accepts an explicit `-cpu`
-flag, so we use `virt` with `-cpu cortex-a72` as the closest faithful
-emulation of a Raspberry Pi 4 environment.
+1. **`virt` machine + Ubuntu guest** — full-system emulation with VirtIO
+   storage and user-mode networking. Used for the main fp32-vs-int8
+   ResNet50 benchmark (`logs/qemu_bench.log`), because networking makes
+   it possible to install Python/NumPy and build the TVM runtime inside
+   the guest.
+2. **`raspi4b` machine + custom initramfs** — QEMU's actual Raspberry
+   Pi 4 board model. Used to validate the `virt` results on the real
+   Pi 4 machine model (`logs/raspi4b_*.log`). Requires a source-built
+   QEMU >= 9.0 and has no usable networking, so the benchmarks run as
+   self-contained PID 1 binaries instead of a full OS.
+
+## Why two machines?
+
+The project specification asks for a Raspberry Pi emulator under QEMU.
+The distro QEMU on the build host (`qemu-system-aarch64` 6.2.0, Ubuntu
+22.04) only ships Raspberry Pi machine types up to `raspi3b`
+(Cortex-A53); the `raspi4b` model (Cortex-A72) was added in QEMU 9.0.
+Running on `raspi3b` would force a Cortex-A53 microarchitecture,
+mismatched with the LLVM compile target. The generic ARM `virt` machine
+accepts an explicit `-cpu` flag, so the main benchmark uses `virt` with
+`-cpu cortex-a72`.
+
+For the `raspi4b` runs, QEMU 9.2.0 was built from source
+(`./configure --target-list=aarch64-softmmu --enable-slirp`). The
+`raspi4b` machine's device tree disables the bcm2711 peripherals QEMU
+does not emulate — including `brcm,bcm2711-genet-v5`, the Pi 4's
+Ethernet controller — so nothing can be installed inside that guest and
+the TVM *Python* runtime cannot be provisioned there. The `raspi4b`
+benchmarks are therefore statically-provisioned binaries run as PID 1
+from an initramfs (see "raspi4b runs" below). Full details are in
+Section 4.2 of the report.
 
 ## Prerequisites (host)
 
@@ -46,7 +69,7 @@ echo "instance-id: tvm-arm-vm" > meta-data
 cloud-localds seed.img user-data meta-data
 ```
 
-## Boot
+## Boot the `virt` VM
 
 ```bash
 ./boot_virt.sh
@@ -79,7 +102,7 @@ echo 'export PYTHONPATH=$HOME/tvm/python:$PYTHONPATH' >> ~/.bashrc
 echo 'export TVM_LIBRARY_PATH=$HOME/tvm/build' >> ~/.bashrc
 ```
 
-## Run the benchmark
+## Run the `virt` benchmark
 
 From the host, copy the six artifact files into the VM:
 
@@ -100,9 +123,40 @@ ssh -p 2222 ubuntu@localhost "python3 run_bench_in_vm.py" \
 
 The output is the file in `logs/qemu_bench.log`.
 
+## raspi4b runs (QEMU >= 9.0, built from source)
+
+Two self-contained benchmarks run as PID 1 from a custom initramfs on
+the `raspi4b` machine, booting the Raspberry Pi OS Bookworm arm64 kernel
+(Linux 6.6.51) with `rdinit=/init`:
+
+- **`microbench.c`** — statically linked scalar MAC-throughput loops
+  (fp32/int32/int16/int8) plus a `/proc/cpuinfo` dump proving all four
+  emulated cores are Cortex-A72 (MIDR `0x410fd083`). Log:
+  `logs/raspi4b_microbench.log`. Build:
+
+  ```bash
+  aarch64-linux-gnu-gcc -O2 -mcpu=cortex-a72 -static -o microbench microbench.c
+  ```
+
+- **`resnet50_bench.cpp`** — links the TVM C++ runtime statically, loads
+  a cross-compiled `resnet50_*_arm.{so,json,params}` triple, runs one
+  warmup plus five timed inferences, prints results over `/dev/kmsg`,
+  and powers the VM off. The full build command (requires an aarch64
+  build of `libtvm_runtime.a`) is in the file's header comment. Logs:
+  - `logs/raspi4b_resnet50_int8.log` — int8 completed end-to-end
+    (mean 5.725 s over 5 runs, same output argmax as the `virt` run).
+  - `logs/raspi4b_resnet50_fp32_oom.log` — fp32 could not run: the
+    `raspi4b` machine's RAM is fixed at 2 GiB, the ~385 MB fp32
+    artifact triple pushes the initramfs past what the kernel can
+    unpack (`ENOSPC` mid-write), and the truncated `.so` faults with
+    SIGBUS when mapped.
+
+The compiled binaries are not checked in; both rebuild from the sources
+in this directory with the commands above.
+
 ## Notes
 
-- QEMU's TCG software CPU emulator does not preserve A72's pipeline depth,
-  branch predictor, or cache hierarchy; absolute latencies are much
-  higher than native Pi 4. The fp32-vs-int8 ratio remains informative
-  because both configurations pay the same emulation cost.
+- QEMU's TCG software CPU emulation does not preserve the A72's pipeline
+  depth, branch predictor, or cache hierarchy; absolute latencies are
+  much higher than native Pi 4. The fp32-vs-int8 *ratio* remains
+  informative because both configurations pay the same emulation cost.

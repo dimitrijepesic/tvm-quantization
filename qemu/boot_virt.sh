@@ -5,7 +5,7 @@
 #
 # Why not raspi3b? QEMU 6.2 (Ubuntu 22.04 default) only exposes raspi3b at the
 # top of the Pi family; raspi3b emulates Cortex-A53, not the A72 we cross-
-# compile for. raspi4b was only added in QEMU 8.2+. Using the virt machine
+# compile for. raspi4b was only added in QEMU 9.0. Using the virt machine
 # with an explicit -cpu cortex-a72 gives us a faithful A72 execution of the
 # same binary that would run on real Pi 4 hardware.
 #
