@@ -1,26 +1,31 @@
 # TVM inference benchmark — to be run INSIDE the aarch64 Ubuntu QEMU guest.
 # Loads the cross-compiled fp32 and int8 ResNet50 artifacts (.so/.json/.params)
-# from /home/ubuntu/, executes a warmup run plus a TVM benchmark() call, and
-# prints a summary used to populate logs/qemu_bench.log on the host.
+# from the guest user's home directory, executes a warmup run plus a TVM
+# benchmark() call, and prints a summary used to populate
+# logs/qemu_bench.log on the host.
 #
-# Inside the guest, copy the six artifact files first:
+# From the host, copy the six artifact files first:
 #   scp -P 2222 experiments/resnet50_{fp32,int8}_arm.{so,json,params} \
 #       ubuntu@localhost:~
 # Then SSH in and run:
 #   ssh -p 2222 ubuntu@localhost
-#   python3 run_bench.py 2>&1 | tee qemu_bench.log
+#   python3 run_bench_in_vm.py 2>&1 | tee qemu_bench.log
+import os
+import time
+
+import numpy as np
 import tvm
 from tvm.contrib import graph_executor
-import numpy as np
-import time
+
+ART_DIR = os.path.expanduser("~")
 
 
 def load_and_bench(prefix, label):
     print(f"\n=== {label} ===", flush=True)
-    lib = tvm.runtime.load_module(f"/home/ubuntu/{prefix}.so")
-    with open(f"/home/ubuntu/{prefix}.json", "r") as f:
+    lib = tvm.runtime.load_module(os.path.join(ART_DIR, f"{prefix}.so"))
+    with open(os.path.join(ART_DIR, f"{prefix}.json"), "r") as f:
         graph = f.read()
-    with open(f"/home/ubuntu/{prefix}.params", "rb") as f:
+    with open(os.path.join(ART_DIR, f"{prefix}.params"), "rb") as f:
         params = f.read()
     dev = tvm.cpu(0)
     m = graph_executor.create(graph, lib, dev)

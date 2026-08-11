@@ -1,5 +1,5 @@
 # probe native int1 quantization with full instrumentation
-# run with: python3 probe_int1.py 2>&1 | tee int1_native.log
+# run with: python3 probe_int1.py 2>&1 | tee ../logs/int1_native.log
 import sys
 import os
 import atexit

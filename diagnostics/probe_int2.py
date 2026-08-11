@@ -1,5 +1,5 @@
 # probe native int2 quantization. print python stack every 30s during hang
-# run with: python3 probe_int2.py 2>&1 | tee int2_diagnose.log
+# run with: python3 probe_int2.py 2>&1 | tee ../logs/int2_native.log
 import sys
 import os
 import atexit

@@ -1,5 +1,5 @@
 # probe native int4 quantization with heavy diagnostic instrumentation
-# run with: python3 probe_int4.py 2>&1 | tee int4_native.log
+# run with: python3 probe_int4.py 2>&1 | tee ../logs/int4_native.log
 import sys
 import os
 import atexit

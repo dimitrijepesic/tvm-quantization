@@ -43,7 +43,7 @@ qemu-system-aarch64 \
     -m 4G \
     -bios "$EFI" \
     -nographic \
-    -drive if=virtio,file="$DISK" \
+    -drive if=virtio,file="$DISK",format=qcow2 \
     -drive if=virtio,file="$SEED",format=raw \
     -netdev user,id=net0,hostfwd=tcp::2222-:22 \
     -device virtio-net-pci,netdev=net0

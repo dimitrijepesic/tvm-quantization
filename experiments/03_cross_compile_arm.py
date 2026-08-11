@@ -17,6 +17,8 @@ by qemu/run_bench_in_vm.py.
 Run: python 03_cross_compile_arm.py 2>&1 | tee ../logs/cross_compile_arm.log
 """
 import os
+import shutil
+import sys
 
 import tvm
 from tvm import relay
@@ -27,9 +29,17 @@ import numpy as np
 import torch
 import torchvision
 
+CROSS_COMPILER = "aarch64-linux-gnu-gcc"
+
+# fail fast: without this check the missing cross-compiler only surfaces
+# after several minutes of model compilation
+if shutil.which(CROSS_COMPILER) is None:
+    sys.exit(f"error: {CROSS_COMPILER} not found in PATH "
+             "(Ubuntu: sudo apt install gcc-aarch64-linux-gnu)")
+
 # cross-compilation helper
 # uses aarch64-linux-gnu-gcc to produce an arm shared library from tvm's generated code
-def cross_cc(output, files, options=None, cc="aarch64-linux-gnu-gcc"):
+def cross_cc(output, files, options=None, cc=CROSS_COMPILER):
     return _cc.create_shared(output, files, options, cc=cc)
 
 # model import

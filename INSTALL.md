@@ -9,7 +9,7 @@ pip install -r requirements.txt
 ## TVM (build from source, v0.15.0)
 
 ```
-git clone --branch v0.15.0 https://github.com/apache/tvm.git
+git clone --recursive --branch v0.15.0 https://github.com/apache/tvm.git
 cd tvm && mkdir build && cp cmake/config.cmake build/
 # Edit build/config.cmake: set USE_LLVM to ON
 cd build && cmake .. && make -j$(nproc)
@@ -25,7 +25,9 @@ sudo apt install gcc-aarch64-linux-gnu
 ## QEMU emulation (for qemu/ benchmarks)
 
 ```
-sudo apt install qemu-system-aarch64 qemu-efi-aarch64 cloud-image-utils
+sudo apt install qemu-system-arm qemu-efi-aarch64 cloud-image-utils
 ```
 
-See `qemu/README.md` for VM setup details.
+This is sufficient for the `virt`-machine benchmark. The `raspi4b`
+machine runs additionally require QEMU >= 9.0 built from source; see
+`qemu/README.md` for details on both setups.

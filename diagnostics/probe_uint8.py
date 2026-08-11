@@ -1,7 +1,7 @@
 # probe uint8 input / int8 weight quantization with dispatch logging
 # tests whether the vnni-preferred dtype pairing (uint8 data, int8 weights)
 # changes kernel dispatch or performance vs signed int8/int8
-# run with: python3 probe_uint8.py 2>&1 | tee uint8_bench.log
+# run with: python3 probe_uint8.py 2>&1 | tee ../logs/uint8_bench.log
 
 import sys
 import os
